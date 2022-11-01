@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <title>E.C.G. Bremen e.V.</title>
+        <link rel="stylesheet" type="text/css" href="styles.css" />
+        <script src="/scripts/socket.io/client-dist/socket.io.min.js"></script>
+    </head>
+    <body onload="init()">
+        <h1 class="header">E.C.G. Bremen e.V.</h1>
+        <section class="translateContainer">
+            <h3>Übersetzung - Statistik</h3>
+            <div><b>Publisher aktiv: </b><span id="pub_translate">Nein</span></div>
+            <div><b>Verbundene Clients: </b><span id="clients_translate">0</span></div>
+        </section>
+        <script type="text/javascript" src="stats.js"></script>
+    </body>
+</html>

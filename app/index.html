@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <title>E.C.G. Bremen e.V.</title>
+        <link rel="stylesheet" type="text/css" href="styles.css" />
+        <script src="js/mediasoup-client.js"></script>
+        <script src="/scripts/socket.io/client-dist/socket.io.min.js"></script>
+    </head>
+    <body onload="init()">
+        <h1 class="header">E.C.G. Bremen e.V.</h1>
+        <div class="visualizer">
+            <canvas id="anim_canvas" width="300" height="100"></canvas>
+        </div>
+        <section class="translateContainer">
+            <h3>Слушать перевод на русский язык</h3>
+            <button class="start" onclick="handleStream()" id="btn_stream"><div></div></button>
+        </section>
+        <audio playinline autoplay id="player"></audio>
+
+        <script type="text/javascript" src="js/visualize.js"></script>
+        <script type="text/javascript" src="consumer.js"></script>
+    </body>
+</html>
