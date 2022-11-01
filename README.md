@@ -26,7 +26,7 @@ This project uses the WebApi for broadcasting. You can only broadcast from local
 
 ## Listen
 
-To listen to one stream just vist `http://<ip>:<port>` and press the play button.
+To listen to one stream just vist `http://<ip>:<port>` of your streaming server and press the play button.
 
 ## Stats
 
