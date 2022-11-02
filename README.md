@@ -2,7 +2,7 @@
 
 Sends audio from publisher server to multiple consumers over WebRTC.
 
-This streaming service will only create one http server. It is not considered to use in public production environment. If you want to use it in a production or secure environment, please put this server behind a reverse proxy. Its not part of this project.
+This streaming service will only create one http server. It is not considered to be used in public production environment. If you want to use it in a production or secure environment, please put this server behind a reverse proxy. It's not part of this project.
 
 ## Requirements
 
@@ -12,12 +12,15 @@ This project use [mediasoup](https://mediasoup.org/documentation/v3/mediasoup/in
 - **GNU make**
 - **npm**
 
+This project was tested on ubuntu, macOS, fedora. On debian the run fails.
+
 ## Setup
 
 Just clone this repository and run `npm i` in the root folder. It will install all npm dependencies.
 
 
-To start the server run from roo folder `node server/index.js`. The server will run default on your internal ip and port 80. To use another port run e.g. `PORT=3000 node server/index.js`.
+To start the server run from root folder `node server/index.js`. The server will run on your internal ip and port 80. To use another port run e.g. `PORT=3000 node server/index.js`.
+Your ip address will be determined automatically. IIf this does not work start with manual set ip e.g `IP=0.0.0.0 node server/index.js`.
 
 ## Broadcast
 
@@ -30,8 +33,8 @@ To listen to one stream just vist `http://<ip>:<port>` of your streaming server 
 
 ## Stats
 
-You can statistic of connected clients with the `/stats.html` route: `http://<ip>:<port>/stats.html`
+You can see statistic of connected clients with the `/stats.html` route: `http://<ip>:<port>/stats.html`
 
 ## Credits
 
-This project s based on the broadcast example from https://github.com/mganeko/mediasoup_v3_example/
+This project is based on the broadcast example from https://github.com/mganeko/mediasoup_v3_example/

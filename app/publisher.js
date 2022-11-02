@@ -256,9 +256,11 @@ function connectSocket(src) {
 
 function disconnectSocket(src) {
   if (socket) {
+    socket.emit('producerclose');
     socket.close();
     socket = null;
     src.clientId = null;
+    src.clientCount.innerHTML = 0;
     console.log('socket.io closed.');
   }
 }

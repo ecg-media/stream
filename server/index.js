@@ -117,6 +117,14 @@ socketio.on('connection', function (socket) {
       await transport.connect({ dtlsParameters: data.dtlsParameters });
       sendResponse({}, callback);
     });
+
+    socket.on('producerclose', () => {
+      if (audioProducer) {
+        const id = getId(socket);
+        console.log("here i am");
+        socket.broadcast.emit('producerClosed', { localId: id, remoteId: producerSocketId, kind: 'audio' });
+      }
+    });
   
     socket.on('consume', async (data, callback) => {
       const kind = data.kind;
@@ -142,9 +150,9 @@ socketio.on('connection', function (socket) {
         })
         consumer.on('producerclose', () => {
           console.log('consumer -- on.producerclose');
+          socket.broadcast.emit('producerClosed', { localId: id, remoteId: producerSocketId, kind: 'audio' });
           consumer.close();
           removeAudioConsumer(socket, id);
-          socket.broadcast.emit('producerClosed', { localId: id, remoteId: producerSocketId, kind: 'audio' });
         });
       
         console.log('-- consumer ready ---');
@@ -238,8 +246,13 @@ function updateClientsCount() {
 // ####### Configure mediasoup #######
 const mediasoup = require("mediasoup");
 let worker = null;
-const stunServerIp = [].concat(...Object.values(require('os').networkInterfaces())).find(x => !x.internal && x.family === 'IPv4')?.address;
-console.log('STUN IPs:' + stunServerIp);
+let stunServerIp = undefined;
+try {
+  stunServerIp = [].concat(...Object.values(require('os').networkInterfaces())).find(x => !x.internal && x.family === 'IPv4')?.address;
+} catch(e) {
+  console.error("Could not determine ip address automatically. Please set your ip address as environment variable and start e.g. with IP=0.0.0.0 node server/index.js")
+}
+ 
 const mediasoupOptions = {
   // Worker settings
   worker: {
@@ -270,8 +283,7 @@ const mediasoupOptions = {
   // WebRtcTransport settings
   webRtcTransport: {
     listenIps: [
-      // TODO replace with ip (über env variable)
-      { ip: '0.0.0.0', announcedIp: stunServerIp},
+      { ip: '0.0.0.0', announcedIp: stunServerIp || process.env.IP},
     ],
     enableUdp: true,
     enableTcp: true,

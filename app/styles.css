@@ -94,3 +94,16 @@ select {
     background: white;
     border: 1px solid #444;
 }
+
+.error_info {
+    border: 1px solid darkred;
+    width: 50%;
+    text-align: center;
+    margin: auto;
+    background: maroon;
+    color: white;
+  }
+
+.error_info.hide {
+    display: none;
+}

@@ -1,6 +1,7 @@
 const player = document.getElementById('player');
 const btn = document.getElementById('btn_stream');
 const animation = document.getElementById('anim_canvas');
+const error_info = document.getElementById('no_publisher');
 let stream = null;
 let clientId = null;
 let device = null;
@@ -132,6 +133,7 @@ function connectSocket() {
          const localId = message.localId;
          const remoteId = message.remoteId;
          const kind = message.kind;
+         error_info.classList.remove('hide');
          console.log('--try removeConsumer remoteId=' + remoteId + ', localId=' + localId + ', kind=' + kind);
          if (kind === 'audio') {
             if (consumer) {
@@ -140,7 +142,7 @@ function connectSocket() {
             }
          }
 
-         stop();
+         unsubscribe();
       });
    });
 }
@@ -157,6 +159,7 @@ async function loadDevice(routerRtpCapabilities) {
 }
 
 async function consumeAndResume() {
+   error_info.classList.add('hide');
    const consumer = await consume();
    if (consumer) {
       console.log('-- track exist, consumer ready. ---');
@@ -197,6 +200,7 @@ async function consume() {
       return consumer;
    }
 
+   error_info.classList.remove('hide');
    console.warn('--- remote producer NOT READY');
    return null;
 }
@@ -235,13 +239,9 @@ function unsubscribe() {
       transport = null;
    }
 
-   stop();
+   player.srcObject = null;
    disconnectSocket();
    updateButtons();
-}
-
-function stop() {
-   player.srcObject = null;
 }
 
 function disconnectSocket() {
