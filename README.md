@@ -20,7 +20,30 @@ Just clone this repository and run `npm i` in the root folder. It will install a
 
 
 To start the server run from root folder `node server/index.js`. The server will run on your internal ip and port 80. To use another port run e.g. `PORT=3000 node server/index.js`.
-Your ip address will be determined automatically. IIf this does not work start with manual set ip e.g `IP=0.0.0.0 node server/index.js`.
+Your ip address will be determined automatically. If this does not work start with manual set ip e.g `IP=0.0.0.0 node server/index.js`.
+
+### Auto start in linux
+On a linux system you can create a systemd service to autostart the service when you restart your machine.
+
+`cat /etc/system.d/system/stream.service`
+
+```
+Unit]
+Description=Service listen on the soundcard line in and streaming it so clients can listen to it on the network via browser at http://<ip>
+
+[Service]
+Type=simple
+EecStart=node /path/to/server/index.js
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Than run following commands to enable and start the servcie.
+
+- `sudo systemctl daemon-reload`
+- `sudo systemctl start stream`
+- `sudo systemctl enable stream`
 
 ## Broadcast
 
