@@ -6,7 +6,7 @@ This streaming service will only create one http server. It is not considered to
 
 ## Requirements
 
-This project use [mediasoup](https://mediasoup.org/documentation/v3/mediasoup/installation/). Please refer to the documentation for for information to setup mediasoup.
+This project use [mediasoup](https://mediasoup.org/documentation/v3/mediasoup/installation/). Please refer to the documentation for information to setup mediasoup.
 - **python 3.6** or higher shhould be installed on the system.
 - **node v12** or higher
 - **GNU make**
@@ -45,10 +45,17 @@ Than run following commands to enable and start the servcie.
 - `sudo systemctl start stream`
 - `sudo systemctl enable stream`
 
+### Multi instances
+You can run multi instances on one server by defining a different port for one instance. For example you want to use 2 different streams in your environment. Than you can run the first one for example on port 80 and the second one on port 8080. Consider that you need two sound input devices from where you can stream.
+
+Run first one with: `IP=x.y.z.a node server/index.js`
+
+Run second one with: `PORT=8080 IP=x.y.z.a node server/index.js`
+
 ## Broadcast
 
 To broadcast audio visit `http://localhost:<port>/publish.html` select your sound input device and press the publish button to start streaming.
-This project uses the WebApi for broadcasting. You can only broadcast from localhost with http. If you want use it with another ip address or domain you have to use https. This is not part of this project.
+This project uses the WebApi for broadcasting. You can only broadcast from localhost with http. If you want to use it with another ip address or domain you have to use https. This is not part of this project.
 
 ## Listen
 
