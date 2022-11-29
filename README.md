@@ -18,6 +18,10 @@ This project was tested on ubuntu, macOS, fedora. On debian the run fails.
 
 Just clone this repository and run `npm i` in the root folder. It will install all npm dependencies.
 
+````
+sudo apt install npm python3-pip
+npm i
+````
 
 To start the server run from root folder `node server/index.js`. The server will run on your internal ip and port 80. To use another port run e.g. `PORT=3000 node server/index.js`.
 Your ip address will be determined automatically. If this does not work start with manual set ip e.g `IP=0.0.0.0 node server/index.js`.
