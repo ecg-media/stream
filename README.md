@@ -32,12 +32,12 @@ On a linux system you can create a systemd service to autostart the service when
 `cat /etc/system.d/system/stream.service`
 
 ```
-Unit]
+[Unit]
 Description=Service listen on the soundcard line in and streaming it so clients can listen to it on the network via browser at http://<ip>
 
 [Service]
 Type=simple
-EecStart=node /path/to/server/index.js
+ExecStart=node /path/to/server/index.js
 
 [Install]
 WantedBy=multi-user.target
