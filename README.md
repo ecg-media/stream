@@ -18,8 +18,11 @@ This project was tested on ubuntu, macOS, fedora. On debian the run fails.
 
 Just clone this repository and run `npm i` in the root folder. It will install all npm dependencies.
 
+For example to get started in ubuntu run following commands.
+
 ````
 sudo apt install npm python3-pip
+cd /path/to/cloned/fodler/
 npm i
 ````
 
