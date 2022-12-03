@@ -248,7 +248,7 @@ const mediasoup = require("mediasoup");
 let worker = null;
 let stunServerIp = undefined;
 try {
-  stunServerIp = [].concat(...Object.values(require('os').networkInterfaces())).find(x => !x.internal && x.family === 'IPv4')?.address;
+  stunServerIp = [].concat(...Object.values(require('os').networkInterfaces())).find(x => !x.internal && x.family === 'IPv4').address;
 } catch(e) {
   console.error("Could not determine ip address automatically. Please set your ip address as environment variable and start e.g. with IP=0.0.0.0 node server/index.js")
 }
