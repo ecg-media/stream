@@ -4,6 +4,8 @@ Sends audio from publisher server to multiple consumers over WebRTC.
 
 This streaming service will only create one http server. It is not considered to be used in public production environment. If you want to use it in a production or secure environment, please put this server behind a reverse proxy. It's not part of this project.
 
+![Diagram](diagram.svg)
+
 ## Requirements
 
 This project use [mediasoup](https://mediasoup.org/documentation/v3/mediasoup/installation/). Please refer to the documentation for information to setup mediasoup.
@@ -20,9 +22,10 @@ Just clone this repository and run `npm i` in the root folder. It will install a
 
 For example to get started in ubuntu run following commands.
 
-````
+```
 sudo apt install npm python3-pip
-cd /path/to/cloned/fodler/
+git clone https://github.com/ecg-media/stream.git
+cd /path/to/cloned/folder/
 npm i
 ````
 
