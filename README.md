@@ -9,7 +9,7 @@ This streaming service will only create one http server. It is not considered to
 ## Requirements
 
 This project use [mediasoup](https://mediasoup.org/documentation/v3/mediasoup/installation/). Please refer to the documentation for information to setup mediasoup.
-- **python 3.6** or higher shhould be installed on the system.
+- **python 3.6** or higher should be installed on the system.
 - **node v12** or higher
 - **GNU make**
 - **npm**
@@ -18,7 +18,7 @@ This project was tested on ubuntu, macOS, fedora. On debian the run fails.
 
 ## Setup
 
-Just clone this repository and run `npm i` in the root folder. It will install all npm dependencies.
+Just clone this repository or download the code and run `npm i` in the root folder. It will install all npm dependencies.
 
 For example to get started in ubuntu run following commands.
 
