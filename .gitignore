@@ -103,3 +103,5 @@ dist
 # TernJS port file
 .tern-port
 .DS_Store
+# Stream settings, password hash and statistics (DATA_DIR)
+data/

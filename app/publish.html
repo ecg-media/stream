@@ -1,33 +1,164 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
     <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-        <title>E.C.G. Bremen e.V. - Brodcast</title>
-        <link rel="stylesheet" type="text/css" href="styles.css" />
-        <script src="js/mediasoup-client.js"></script>
-        <script src="/scripts/socket.io/client-dist/socket.io.min.js"></script>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#1f2124">
+        <title>Stream</title>
+        <link rel="stylesheet" href="styles.css">
+        <script src="js/common.js"></script>
+        <script src="js/i18n.js"></script>
+        <script src="js/visualize.js"></script>
+        <script src="js/mediasoup-client.js" defer></script>
+        <script src="/scripts/socket.io/client-dist/socket.io.min.js" defer></script>
+        <script src="publisher.js" defer></script>
     </head>
-    <body onload="init()">
-        <h1 class="header">E.C.G. Bremen e.V.</h1>
-        <section class="translateContainer">
-            <h3>Übersetzung</h3>
-            <div class="visualizer">
-                <canvas id="anim_canvas_translate" width="300" height="100"></canvas>
+    <body class="admin">
+        <div class="sticky">
+            <header class="app-bar">
+                <h1 id="title"></h1>
+                <button class="btn tonal small" id="btn_add" hidden><span data-icon="add"></span><span class="label" data-i18n="addChannel"></span></button>
+                <button class="icon-btn" id="btn_settings" data-i18n-label="settings"><span data-icon="settings"></span></button>
+            </header>
+            <nav class="tabs" role="tablist" id="tabs" hidden>
+                <button role="tab" data-tab="channels" aria-selected="true"><span data-icon="graphic_eq"></span><span data-i18n="channels"></span></button>
+                <button role="tab" data-tab="stats" aria-selected="false"><span data-icon="bar_chart"></span><span data-i18n="stats"></span></button>
+            </nav>
+        </div>
+
+        <main>
+            <section class="card login" id="view_login" hidden>
+                <h2><span data-icon="lock"></span><span data-i18n="login"></span></h2>
+                <form id="form_login">
+                    <label class="field"><span data-i18n="adminPassword"></span><input type="password" id="login_password" autocomplete="current-password" required></label>
+                    <div class="actions"><button class="btn" type="submit" data-i18n="login"></button></div>
+                </form>
+            </section>
+
+            <div id="view_admin" hidden>
+                <section id="tab_channels">
+                    <div class="notice warn" id="insecure" hidden>
+                        <span data-icon="warning"></span>
+                        <p data-i18n="insecure"></p>
+                    </div>
+                    <div class="notice warn" id="no_password" hidden>
+                        <span data-icon="lock"></span>
+                        <p data-i18n="noPassword"></p>
+                    </div>
+                    <div id="channel_cards"></div>
+                </section>
+
+                <section id="tab_stats" hidden>
+                    <div class="card">
+                        <div class="row" style="margin-top:0">
+                            <select id="stats_channel" data-i18n-label="channel"></select>
+                            <select id="stats_days" data-i18n-label="period">
+                                <option value="30" data-i18n="last30"></option>
+                                <option value="90" data-i18n="last90" selected></option>
+                                <option value="365" data-i18n="lastYear"></option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h2 data-i18n="perDay"></h2>
+                        <p class="muted" id="stats_empty" data-i18n="statsEmpty" hidden></p>
+                        <div id="chart_days"></div>
+                        <div class="legend"><span><i style="background:var(--primary)"></i><span data-i18n="average"></span></span><span><i style="background:var(--primary-soft)"></i><span data-i18n="maximum"></span></span></div>
+                    </div>
+                    <div class="card">
+                        <h2 data-i18n="perWeekday"></h2>
+                        <div id="chart_weekdays"></div>
+                    </div>
+                    <div class="card">
+                        <h2 data-i18n="allDays"></h2>
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th data-i18n="date"></th><th data-i18n="day"></th><th class="num" data-i18n="avgListeners"></th><th class="num" data-i18n="maximum"></th><th class="num" data-i18n="airtime"></th></tr></thead>
+                                <tbody id="stats_table"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
             </div>
-            <div><select class="devices" id="device_select_translate"></select></div>
-            <div class="columns">
-                <span class="input">
-                    <svg class="svg-icon" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 72.93 122.88" style="enable-background:new 0 0 72.93 122.88" xml:space="preserve"><style type="text/css">.st0{fill-rule:evenodd;clip-rule:evenodd;}</style><g><path class="st0" d="M10.94,0h51.04C68,0,72.93,4.93,72.93,10.94v100.99c0,6.02-4.93,10.94-10.94,10.94l-51.04,0 C4.93,122.88,0,117.95,0,111.94V10.95C0,4.93,4.93,0,10.94,0L10.94,0z M36.46,100.1c3.91,0,7.09,3.17,7.09,7.09 c0,3.91-3.18,7.09-7.09,7.09c-3.92,0-7.09-3.17-7.09-7.09C29.37,103.28,32.55,100.1,36.46,100.1L36.46,100.1z M25.17,8.86h22.59 c0.16,0,0.3,0.14,0.3,0.3v3.3c0,0.16-0.14,0.3-0.3,0.3H25.17c0,0,0,0,0,0c-0.16,0-0.3-0.13-0.3-0.3v0l0-3.3c0,0,0,0,0,0 C24.87,8.99,25,8.86,25.17,8.86L25.17,8.86L25.17,8.86L25.17,8.86z M9.65,21.53h53.63c0.98,0,1.78,0.81,1.78,1.78v70.01 c0,0.97-0.81,1.78-1.78,1.78H9.65c-0.97,0-1.78-0.8-1.78-1.78V23.3C7.87,22.33,8.67,21.53,9.65,21.53L9.65,21.53z"/></g></svg>
-                    <label class="count" id="connected_clients_translate">0</label>
-                </span>
+        </main>
+
+        <dialog class="settings" id="dialog_settings">
+            <div class="dialog-head">
+                <h2 tabindex="-1" autofocus data-i18n="settings"></h2>
+                <button class="icon-btn" id="btn_close_settings" data-i18n-label="close"><span data-icon="close"></span></button>
             </div>
-            <button class="start" id="btn_stream_translate" onclick="handleStream(translation)"><div></div></button>
-            <button class="reload" id="btn_reload_translate" onclick="reload()" disabled>&#x21bb;</button>
-            <audio playinline autoplay id="player_translate"></audio>
-        </section>
-        
-        <script type="text/javascript" src="js/visualize.js"></script>
-        <script type="text/javascript" src="publisher.js"></script>
+            <section>
+                <h3 data-i18n="uiLanguage"></h3>
+                <div class="segmented four" role="group" id="ui_languages"></div>
+            </section>
+            <section>
+                <h3 data-i18n="appearance"></h3>
+                <div class="segmented" role="group">
+                    <button type="button" data-set-theme="dark"><span data-icon="dark_mode"></span><span data-i18n="dark"></span></button>
+                    <button type="button" data-set-theme="light"><span data-icon="light_mode"></span><span data-i18n="light"></span></button>
+                </div>
+            </section>
+            <section class="admin-only">
+                <h3 data-i18n="listenerAddress"></h3>
+                <p class="muted" data-i18n="listenerAddressHint"></p>
+                <div id="addresses"></div>
+            </section>
+            <section class="admin-only">
+                <h3 data-i18n="heading"></h3>
+                <form id="form_title">
+                    <label class="field"><span data-i18n="headingHint"></span><input type="text" id="input_title" maxlength="60"></label>
+                    <div class="actions"><button class="btn" type="submit" data-i18n="save"></button></div>
+                </form>
+            </section>
+            <section class="admin-only">
+                <h3 data-i18n="adminPassword"></h3>
+                <p class="muted" id="password_state"></p>
+                <form id="form_password">
+                    <label class="field"><span data-i18n="newPassword"></span><input type="password" id="input_password" autocomplete="new-password" minlength="4" required></label>
+                    <div class="actions">
+                        <button class="btn danger" type="button" id="btn_remove_password" data-i18n="removePassword" hidden></button>
+                        <button class="btn" type="submit" data-i18n="savePassword"></button>
+                    </div>
+                </form>
+            </section>
+            <section id="logout_section" hidden>
+                <button class="btn tonal" type="button" id="btn_logout"><span data-icon="logout"></span><span data-i18n="logout"></span></button>
+            </section>
+        </dialog>
+
+        <dialog id="dialog_channel">
+            <form method="dialog" id="form_channel">
+                <h2 id="dialog_title"></h2>
+                <label class="field"><span data-i18n="channelName"></span><input type="text" id="channel_input_name" maxlength="60" required></label>
+                <label class="field"><span data-i18n="spokenLanguage"></span><select id="channel_input_language"></select></label>
+                <div class="actions">
+                    <button class="btn text" type="button" id="btn_cancel_channel" data-i18n="cancel"></button>
+                    <button class="btn" value="save" data-i18n="save"></button>
+                </div>
+            </form>
+        </dialog>
+
+        <template id="tpl_channel">
+            <article class="card">
+                <div class="card-head">
+                    <h2 class="name"></h2>
+                    <span class="badge state"></span>
+                    <span class="meta" data-i18n-label="listeners"><span data-icon="group"></span><span class="listeners">0</span></span>
+                </div>
+                <div class="muted language"></div>
+                <div class="meter" aria-hidden="true"><i></i></div>
+                <div class="row">
+                    <select class="device" data-i18n-label="audioSource"></select>
+                    <button class="btn publish"><span class="publish-icon"></span><span class="publish-text"></span></button>
+                </div>
+                <label class="check" data-i18n-label="mixerHint"><input type="checkbox" class="raw"><span data-i18n="mixer"></span></label>
+                <div class="row">
+                    <button class="btn text small edit"><span data-icon="edit"></span><span data-i18n="edit"></span></button>
+                    <button class="btn text small reload"><span data-icon="refresh"></span><span data-i18n="reloadListeners"></span></button>
+                    <span class="spacer"></span>
+                    <button class="btn text small delete" style="color:var(--danger)"><span data-icon="delete"></span><span data-i18n="delete"></span></button>
+                </div>
+            </article>
+        </template>
     </body>
 </html>

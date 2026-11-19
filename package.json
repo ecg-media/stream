@@ -1,21 +1,30 @@
 {
   "name": "stream",
-  "version": "1.0.0",
-  "description": "An audio streaming application using Mediasoup, Websockets and WebRTC.",
+  "version": "2.0.0",
+  "description": "Low-latency multi-channel audio streaming for local networks using mediasoup, WebSockets and WebRTC.",
   "main": "server/index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build-client": "node_modules/browserify/bin/cmd.js node_modules/mediasoup-client/lib/index.js -s MediasoupClient -o app/js/mediasoup-client.js"
+    "start": "node server/index.js",
+    "test": "node --test test/",
+    "build-client": "esbuild node_modules/mediasoup-client/lib/index.js --bundle --minify --format=iife --global-name=MediasoupClient --target=es2020 --outfile=app/js/mediasoup-client.js",
+    "set-password": "node server/index.js --set-password"
   },
   "author": "ecg-media",
   "license": "ISC",
   "dependencies": {
-    "express": "4.18.2",
-    "mediasoup": "3.10.11",
-    "mediasoup-client": "3.6.58",
-    "socket.io": "4.5.3"
+    "express": "5.3.0",
+    "mediasoup": "3.32.2",
+    "mediasoup-client": "3.26.0",
+    "socket.io": "4.8.4"
   },
   "devDependencies": {
-    "browserify": "17.0.0"
+    "esbuild": "0.28.2"
+  },
+  "allowScripts": {
+    "mediasoup@3.32.2": true,
+    "esbuild@0.28.2": true
   }
 }

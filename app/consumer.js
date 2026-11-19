@@ -1,283 +1,241 @@
-const player = document.getElementById('player');
-const btn = document.getElementById('btn_stream');
-const animation = document.getElementById('anim_canvas');
-const error_info = document.getElementById('no_publisher');
-let stream = null;
-let clientId = null;
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+const audio = $('audio');
+const rings = new Rings($('rings'));
+const level = new Level((value, bands) => rings.draw(bands, !!consumer), 4);
+const mediaStream = new MediaStream();
+const { socket, request } = connect();
+
+let title = '';
+let channels = null;
+let channelId = null;
+let choosing = false;
+let wantPlay = false;
+let starting = false;
+let consuming = false;
+let failed = false;
 let device = null;
 let transport = null;
 let consumer = null;
-let socket = null;
+let retryTimer = null;
 
-// inits the consumer.
-function init() {
-   updateButtons();
-   console.log('Consumer loaded');
+const currentChannel = () => channels?.find((c) => c.id === channelId) || null;
+
+socket.on('channels', (data) => {
+  title = data.title;
+  channels = data.channels;
+  const ids = channels.map((c) => c.id);
+  if (channelId && !ids.includes(channelId)) {
+    stop();
+    channelId = null;
+  }
+  if (!channelId && !choosing) {
+    const stored = storageGet('channel');
+    if (channels.length === 1) channelId = channels[0].id;
+    else if (ids.includes(stored)) channelId = stored;
+  }
+  if (wantPlay && transport && !consumer && currentChannel()?.live) consume();
+  render();
+});
+socket.on('consumerClosed', () => {
+  closeConsumer();
+  render();
+});
+socket.on('reloadPage', () => location.reload());
+socket.on('connect', () => {
+  if (wantPlay) startListening();
+});
+socket.on('disconnect', () => {
+  dropMedia();
+  render();
+});
+
+$('btn_stream').addEventListener('click', () => (wantPlay ? stop() : play()));
+$('btn_change').addEventListener('click', () => {
+  stop();
+  choosing = true;
+  channelId = null;
+  render();
+});
+
+function selectChannel(id) {
+  channelId = id;
+  choosing = false;
+  storageSet('channel', id);
+  render();
 }
 
-function handleStream() {
-   if (!isSocketConnected()) {
-      subscribe();
-      return;
-   }
-
-   unsubscribe();
+function play() {
+  wantPlay = true;
+  failed = false;
+  // Starting playback inside the click keeps mobile browsers from blocking the audio that arrives later.
+  Level.unlock();
+  audio.srcObject = mediaStream;
+  audio.play().catch(() => {});
+  startListening();
 }
 
-async function subscribe() {
-   if (!isSocketConnected()) {
-      await connectSocket().catch(err => {
-         console.error(err);
-         return;
-      });
-
-      // --- get capabilities --
-      const data = await sendRequest('getRouterRtpCapabilities', {});
-      console.log('getRouterRtpCapabilities:', data);
-      await loadDevice(data);
-   }
-
-   updateButtons();
-
-   // --- prepare transport ---
-   console.log('--- createConsumerTransport --');
-   const params = await sendRequest('createConsumerTransport', {});
-   console.log('transport params:', params);
-   transport = device.createRecvTransport(params);
-   console.log('createConsumerTransport:', transport);
-
-   // --- join & start --
-   transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-      console.log('--consumer transport connect');
-      sendRequest('connectConsumerTransport', { dtlsParameters: dtlsParameters })
-         .then(callback)
-         .catch(errback);
-   });
-
-   transport.on('connectionstatechange', (state) => {
-      switch (state) {
-         case 'connecting':
-            console.log('subscribing...');
-            break;
-
-         case 'connected':
-            console.log('subscribed');
-            break;
-
-         case 'failed':
-            console.log('failed');
-            transport.close();
-            break;
-
-         default:
-            break;
-      }
-   });
-
-   consumer = await consumeAndResume();
-
-   updateButtons();
+function stop() {
+  wantPlay = false;
+  clearTimeout(retryTimer);
+  dropMedia();
+  if (socket.connected) request('stopListening').catch(() => {});
+  render();
 }
 
-function connectSocket() {
-   if (socket) {
-      socket.close();
-      socket = null;
-      clientId = null;
-   }
-
-   return new Promise((resolve, reject) => {
-      socket = io.connect('/');
-
-      socket.on('connect', function (evt) {
-         console.log('socket.io connected()');
-      });
-      socket.on('error', function (err) {
-         console.error('socket.io ERROR:', err);
-         reject(err);
-      });
-      socket.on('disconnect', function (evt) {
-         console.log('socket.io disconnect:', evt);
-      });
-      socket.on('reloadPage', function (evt) {
-         console.log("Reload called");
-         location.reload(true);
-      });
-      socket.on('message', function (message) {
-         console.log('socket.io message:', message);
-         if (message.type === 'welcome') {
-            if (socket.id !== message.id) {
-               console.warn('WARN: something wrong with clientID', socket.io, message.id);
-            }
-
-            clientId = message.id;
-            console.log('connected to server. clientId=' + clientId);
-            resolve();
-         }
-         else {
-            console.error('UNKNOWN message from server:', message);
-         }
-      });
-      socket.on('newProducer', async function (message) {
-         console.log('socket.io newProducer:', message);
-         if (transport) {
-            // start consume
-            if (message.kind === 'audio') {
-               consumer = await consumeAndResume();
-            }
-         }
-      });
-
-      socket.on('producerClosed', function (message) {
-         console.log('socket.io producerClosed:', message);
-         const localId = message.localId;
-         const remoteId = message.remoteId;
-         const kind = message.kind;
-         error_info.classList.remove('hide');
-         console.log('--try removeConsumer remoteId=' + remoteId + ', localId=' + localId + ', kind=' + kind);
-         if (kind === 'audio') {
-            if (consumer) {
-               consumer.close();
-               consumer = null;
-            }
-         }
-
-         unsubscribe();
-      });
-   });
-}
-
-async function loadDevice(routerRtpCapabilities) {
-   try {
+async function startListening() {
+  if (starting || !socket.connected || !wantPlay) return;
+  starting = true;
+  render();
+  try {
+    if (!device) {
       device = new MediasoupClient.Device();
-   } catch (error) {
-      if (error.name === 'UnsupportedError') {
-         console.error('browser not supported');
-      }
-   }
-   await device.load({ routerRtpCapabilities });
-}
-
-async function consumeAndResume() {
-   error_info.classList.add('hide');
-   const consumer = await consume();
-   if (consumer) {
-      console.log('-- track exist, consumer ready. ---');
-      visualizeStream(player, animation, player.srcObject);
-      updateButtons();
-   }
-   else {
-      console.log('-- no consumer yet. ---');
-      return null;
-   }
+      await device.load({ routerRtpCapabilities: await request('getRouterRtpCapabilities') });
+    }
+    dropMedia();
+    const params = await request('listen', { channelId });
+    const recv = device.createRecvTransport(params);
+    transport = recv;
+    recv.on('connect', ({ dtlsParameters }, callback, errback) => {
+      request('connectTransport', { transportId: recv.id, dtlsParameters }).then(callback, errback);
+    });
+    recv.on('connectionstatechange', (state) => {
+      if (state === 'failed' && transport === recv) retry();
+    });
+    failed = false;
+    if (currentChannel()?.live) await consume();
+  } catch (err) {
+    console.error('listen failed:', err);
+    if (err.name === 'UnsupportedError') {
+      wantPlay = false;
+      failed = 'unsupported';
+    } else {
+      retry();
+    }
+  } finally {
+    starting = false;
+    render();
+  }
 }
 
 async function consume() {
-   console.log('--start of consume --');
-   const { rtpCapabilities } = device;
-   const data = await sendRequest('consume', { rtpCapabilities: rtpCapabilities, kind: 'audio' })
-      .catch(err => {
-         console.error('consume ERROR:', err);
-      });
-   const {
-      producerId,
-      id,
-      kind,
-      rtpParameters,
-   } = data;
-
-   if (producerId) {
-      let codecOptions = {};
-      const consumer = await transport.consume({
-         id,
-         producerId,
-         kind,
-         rtpParameters,
-         codecOptions,
-      });
-      addRemoteTrack(consumer.track);
-      console.log('--end of consume');
-      return consumer;
-   }
-
-   error_info.classList.remove('hide');
-   console.warn('--- remote producer NOT READY');
-   return null;
+  if (consuming || !transport) return;
+  consuming = true;
+  try {
+    const data = await request('consume', { rtpCapabilities: device.rtpCapabilities });
+    if (!data.producerId || !transport) return;
+    closeConsumer();
+    consumer = await transport.consume(data);
+    mediaStream.addTrack(consumer.track);
+    if (audio.srcObject !== mediaStream) audio.srcObject = mediaStream;
+    audio.play().catch((err) => console.warn('autoplay blocked:', err));
+    level.attach(mediaStream);
+    updateMediaSession();
+  } catch (err) {
+    console.error('consume failed:', err);
+    retry();
+  } finally {
+    consuming = false;
+    render();
+  }
 }
 
-function addRemoteTrack(track) {
-   if (player.srcObject) {
-      player.srcObject.addTrack(track);
-      return;
-   }
-
-   const newStream = new MediaStream();
-   newStream.addTrack(track);
-   play(newStream)
-      .then(() => { player.volume = 1.0 })
-      .catch(err => { console.error('media ERROR:', err) });
+function retry() {
+  if (!wantPlay) return;
+  failed = true;
+  dropMedia();
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(startListening, 2000);
+  render();
 }
 
-function play(stream) {
-   if (player.srcObject) {
-      console.warn('player ALREADY playing, so ignore');
-      return;
-   }
-   player.srcObject = stream;
-   player.volume = 0;
-   visualizeStream(player, animation, player.srcObject);
-   return player.play();
+function closeConsumer() {
+  if (!consumer) return;
+  mediaStream.removeTrack(consumer.track);
+  consumer.close();
+  consumer = null;
+  level.detach();
 }
 
-function unsubscribe() {
-   if (consumer) {
-      consumer.close();
-      consumer = null;
-   }
-   if (transport) {
-      transport.close();
-      transport = null;
-   }
-
-   player.srcObject = null;
-   disconnectSocket();
-   updateButtons();
+function dropMedia() {
+  closeConsumer();
+  transport?.close();
+  transport = null;
 }
 
-function disconnectSocket() {
-   if (isSocketConnected()) {
-      socket.close();
-      socket = null;
-      clientId = null;
-      console.log('socket.io closed..');
-   }
+function updateMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({ title: currentChannel()?.name || '', artist: title });
+  navigator.mediaSession.setActionHandler('pause', stop);
+  navigator.mediaSession.setActionHandler('stop', stop);
 }
 
-function isSocketConnected() {
-   return socket != null;
+function setLanguage(language) {
+  const t = texts(language);
+  document.documentElement.lang = language;
+  document.documentElement.dir = t.rtl ? 'rtl' : 'ltr';
+  $('btn_theme').setAttribute('aria-label', t.theme);
+  return t;
 }
 
-function sendRequest(type, data) {
-   return new Promise((resolve, reject) => {
-      socket.emit(type, data, (err, response) => {
-         if (!err) {
-            resolve(response);
-         } else {
-            reject(err);
-         }
-      });
-   });
+function render() {
+  if (title) $('title').textContent = title;
+  const channel = currentChannel();
+  $('view_chooser').hidden = !channels || !!channel;
+  $('view_channel').hidden = !channel;
+  if (!channels) return;
+  if (!channel) return renderChooser();
+
+  const t = setLanguage(channel.language);
+  const playing = !!consumer;
+  let hint = t.tap;
+  if (failed === 'unsupported') hint = t.unsupported;
+  else if (wantPlay && failed) hint = t.error;
+  else if (wantPlay && !channel.live) hint = t.waiting;
+  else if (wantPlay && !playing) hint = t.connecting;
+  else if (playing) hint = t.playing;
+
+  document.title = title ? `${channel.name} – ${title}` : channel.name;
+  $('channel_name').textContent = channel.name;
+  $('hint').textContent = hint;
+  const btn = $('btn_stream');
+  btn.classList.toggle('busy', wantPlay && !playing);
+  btn.setAttribute('aria-label', wantPlay ? t.stop : t.listen);
+  btn.replaceChildren(icon(wantPlay ? 'stop' : 'play_arrow'));
+  const status = $('status');
+  status.className = `status ${channel.live ? 'live' : wantPlay ? 'waiting' : ''}`;
+  $('status_text').textContent = channel.live ? t.live : t.offline;
+  $('btn_change').hidden = channels.length < 2;
+  $('btn_change').setAttribute('aria-label', t.change);
+  $('change_text').textContent = t.change;
 }
 
-function updateButtons() {
-   if (isSocketConnected()) {
-      btn.classList.remove('start');
-      btn.classList.add('stop');
-      return;
-   }
-   btn.classList.remove('stop');
-   btn.classList.add('start');
+function renderChooser() {
+  const t = setLanguage(browserLanguage());
+  $('btn_change').hidden = true;
+  document.title = title || document.title;
+  $('choose_title').textContent = t.choose;
+  $('no_channels').hidden = channels.length > 0;
+  $('no_channels').textContent = t.noChannels;
+  $('channel_list').replaceChildren(...channels.map((channel) => {
+    const ct = texts(channel.language);
+    const card = document.createElement('button');
+    card.className = 'channel-card';
+    card.lang = channel.language;
+    card.dir = ct.rtl ? 'rtl' : 'ltr';
+    card.innerHTML = '<span class="avatar"></span><span class="text"><strong></strong><small></small></span><span class="chevron"></span>';
+    card.querySelector('.avatar').append(icon('headphones'));
+    card.querySelector('.chevron').append(icon('chevron_right'));
+    card.querySelector('strong').textContent = channel.name;
+    card.querySelector('small').textContent = `${ct.name} · ${ct.listen}`;
+    if (channel.live) {
+      const badge = document.createElement('span');
+      badge.className = 'badge live';
+      badge.textContent = ct.live;
+      card.querySelector('strong').append(badge);
+    }
+    card.addEventListener('click', () => selectChannel(channel.id));
+    return card;
+  }));
 }
-
-
-
