@@ -1,29 +1,45 @@
 <!DOCTYPE html>
-<html>
+<html lang="de">
     <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <meta name="theme-color" content="#1f2124">
         <title>E.C.G. Bremen e.V.</title>
-        <link rel="stylesheet" type="text/css" href="styles.css" />
-        <script src="js/mediasoup-client.js"></script>
-        <script src="/scripts/socket.io/client-dist/socket.io.min.js"></script>
+        <link rel="stylesheet" href="styles.css">
+        <script src="js/common.js"></script>
+        <script src="js/i18n.js"></script>
+        <script src="js/visualize.js"></script>
+        <script src="js/mediasoup-client.js" defer></script>
+        <script src="/scripts/socket.io/client-dist/socket.io.min.js" defer></script>
+        <script src="consumer.js" defer></script>
     </head>
-    <body onload="init()">
-        <h1 class="header">E.C.G. Bremen e.V.</h1>
-        <div class="visualizer">
-            <div id="no_publisher" class="error_info hide">
-                <p>Die Übersetzung ist nicht aktiv. Warten Sie einen Moment oder wenden Sie sich an das Tonstudio.</p>
-                <p>Перевод не ведется. Подождите минутку или обратитесь в студию звукозаписи.</p>
-            </div>
-            <canvas id="anim_canvas" width="300" height="100"></canvas>
-        </div>
-        <section class="translateContainer">
-            <h3>Слушать перевод на русский язык</h3>
-            <button class="start" onclick="handleStream()" id="btn_stream"><div></div></button>
-        </section>
-        <audio playinline autoplay id="player"></audio>
+    <body>
+        <header class="app-bar">
+            <h1 id="title">E.C.G. Bremen e.V.</h1>
+            <button class="btn tonal small" id="btn_change" hidden><span data-icon="swap_horiz"></span><span class="label" id="change_text"></span></button>
+            <button class="icon-btn" data-theme-toggle id="btn_theme" aria-label="Hell / Dunkel umschalten"></button>
+        </header>
 
-        <script type="text/javascript" src="js/visualize.js"></script>
-        <script type="text/javascript" src="consumer.js"></script>
+        <main class="listener">
+            <section id="view_chooser" hidden>
+                <h2 class="channel-name" id="choose_title"></h2>
+                <p class="hint" id="no_channels" hidden></p>
+                <div class="chooser" id="channel_list"></div>
+            </section>
+
+            <section id="view_channel" hidden>
+                <div>
+                    <h2 class="channel-name" id="channel_name"></h2>
+                    <p class="hint" id="hint" aria-live="polite"></p>
+                </div>
+                <div class="player" id="player">
+                    <canvas class="rings" id="rings"></canvas>
+                    <button class="play-btn" id="btn_stream"><span data-icon="play_arrow"></span></button>
+                </div>
+                <div class="status" id="status"><span class="dot"></span><span id="status_text"></span></div>
+            </section>
+        </main>
+
+        <audio id="audio" autoplay playsinline></audio>
     </body>
 </html>

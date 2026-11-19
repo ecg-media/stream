@@ -1,80 +1,252 @@
-# Audio Stream
+# Stream – Übersetzung live aufs Handy
 
-Sends audio from publisher server to multiple consumers over WebRTC.
+Mit diesem Programm hören Zuhörer eine Übersetzung (oder jeden anderen Ton) **live auf ihrem eigenen Handy** – ohne App, einfach im Browser. Ein Computer nimmt den Ton auf (z. B. vom Mischpult oder Mikrofon des Übersetzers) und schickt ihn über das WLAN an alle Handys. Der Ton kommt **ohne spürbare Verzögerung** an.
 
-This streaming service will only create one http server. It is not considered to be used in public production environment. If you want to use it in a production or secure environment, please put this server behind a reverse proxy. It's not part of this project.
+- Für Zuhörer: Adresse öffnen, auf den großen Knopf tippen, fertig.
+- Mehrere Kanäle möglich, z. B. „Russisch“ und „Englisch“ gleichzeitig.
+- Texte für Zuhörer in 14 Sprachen: Deutsch, Englisch, Russisch, Ukrainisch, Persisch, Arabisch, Hebräisch, Türkisch, Rumänisch, Polnisch, Spanisch, Französisch, Armenisch, Georgisch.
+- Heller und dunkler Modus.
+- Statistik: Wie viele Zuhörer waren an welchem Tag im Durchschnitt da?
+- Funktioniert nur im eigenen Netzwerk (WLAN/LAN). Das Internet wird nur für die Installation und Updates gebraucht.
 
-![Diagram](diagram.svg)
+![So funktioniert es](diagram.svg)
 
-## Requirements
+---
 
-This project use [mediasoup](https://mediasoup.org/documentation/v3/mediasoup/installation/). Please refer to the documentation for information to setup mediasoup.
-- **python 3.6** or higher should be installed on the system.
-- **node v12** or higher
-- **GNU make**
-- **npm**
+## Was Sie brauchen
 
-This project was tested on ubuntu, macOS, fedora. On debian the run fails.
+1. **Einen Computer**, der während des Gottesdienstes / der Veranstaltung läuft (Windows 10/11, Mac oder Linux).
+2. **Eine Tonquelle** an diesem Computer: Mikrofon, USB-Audio-Interface oder Kabel vom Mischpult.
+3. **Ein WLAN**, in dem der Computer und die Handys der Zuhörer sind.
 
-## Setup
+---
 
-Just clone this repository or download the code and run `npm i` in the root folder. It will install all npm dependencies.
+## Installation
 
-For example to get started in ubuntu run following commands.
+Die Installation dauert etwa 5 Minuten. Danach startet das Programm **automatisch**, sobald der Computer eingeschaltet wird.
+
+### Windows
+
+1. Laden Sie die Datei [install-windows.cmd](https://raw.githubusercontent.com/ecg-media/stream/main/installer/install-windows.cmd) herunter (Rechtsklick auf den Link → „Link speichern unter …“).
+2. Doppelklick auf die heruntergeladene Datei.
+3. Falls Windows warnt („Der Computer wurde durch Windows geschützt“): auf **Weitere Informationen** → **Trotzdem ausführen** klicken.
+4. Die Frage nach Administratorrechten mit **Ja** beantworten.
+5. Warten, bis **„Fertig!“** erscheint. Dort stehen auch die Adressen für Zuhörer und Verwaltung.
+
+### Mac
+
+1. Programm **Terminal** öffnen (Spotlight: `⌘ + Leertaste`, „Terminal“ eingeben).
+2. Diese Zeile hineinkopieren und Enter drücken:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo bash
+   ```
+3. Ihr Mac-Passwort eingeben (beim Tippen ist nichts zu sehen – das ist normal) und Enter drücken.
+4. Warten, bis **„Fertig!“** erscheint.
+
+### Linux (Ubuntu, Debian, Fedora, Raspberry Pi OS …)
+
+1. Ein Terminal öffnen.
+2. Diese Zeile hineinkopieren und Enter drücken:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo bash
+   ```
+3. Passwort eingeben und warten, bis **„Fertig!“** erscheint.
+
+---
+
+## Erste Schritte
+
+### 1. Verwaltung öffnen
+
+Am **Computer, auf dem das Programm installiert ist**, im Browser (Chrome, Edge, Firefox oder Safari) diese Adresse öffnen:
 
 ```
-sudo apt install npm python3-pip
-git clone https://github.com/ecg-media/stream.git
-cd /path/to/cloned/folder/
-npm i
-````
-
-To start the server run from root folder `node server/index.js`. The server will run on your internal ip and port 80. To use another port run e.g. `PORT=3000 node server/index.js`.
-Your ip address will be determined automatically. If this does not work start with manual set ip e.g `IP=0.0.0.0 node server/index.js`.
-
-### Auto start in linux
-On a linux system you can create a systemd service to autostart the service when you restart your machine.
-
-`cat /etc/system.d/system/stream.service`
-
-```
-[Unit]
-Description=Service listen on the soundcard line in and streaming it so clients can listen to it on the network via browser at http://<ip>
-
-[Service]
-Type=simple
-ExecStart=node /path/to/server/index.js
-
-[Install]
-WantedBy=multi-user.target
+http://localhost/publish.html
 ```
 
-Than run following commands to enable and start the servcie.
+> Senden geht aus Sicherheitsgründen der Browser **nur direkt an diesem Computer**. Kanäle bearbeiten und die Statistik ansehen geht auch von anderen Geräten aus (Adresse `http://<IP-Adresse>/publish.html`).
 
-- `sudo systemctl daemon-reload`
-- `sudo systemctl start stream`
-- `sudo systemctl enable stream`
+### 2. Kanal einrichten
 
-### Multi instances
-You can run multi instances on one server by defining a different port for one instance. For example you want to use 2 different streams in your environment. Than you can run the first one for example on port 80 and the second one on port 8080. Consider that you need two sound input devices from where you can stream.
+- Unter **Kanäle** ist schon ein Kanal „Übersetzung“ vorhanden.
+- Mit **Bearbeiten** geben Sie ihm einen Namen (z. B. „Russische Übersetzung“) und wählen die **gesprochene Sprache**. Die Zuhörer sehen dann alle Hinweise in dieser Sprache.
+- Mit **Kanal hinzufügen** (oben rechts) legen Sie weitere Kanäle an, z. B. für eine zweite Sprache.
 
-Run first one with: `IP=x.y.z.a node server/index.js`
+### 3. Senden
 
-Run second one with: `PORT=8080 IP=x.y.z.a node server/index.js`
+- Bei dem Kanal die **Audioquelle** auswählen (beim ersten Mal fragt der Browser, ob er auf das Mikrofon zugreifen darf → **Erlauben**).
+- Kommt der Ton per Kabel vom **Mischpult**, das Häkchen **„Mischpult-Eingang“** setzen. Dann verändert der Browser den Ton nicht (keine Echo- und Rauschfilter). Bei einem einfachen Mikrofon das Häkchen weglassen.
+- Auf **Senden starten** tippen. Der farbige Balken zeigt, dass Ton ankommt.
+- Zum Schluss **Senden beenden**.
+- Die Seite der Verwaltung muss während des Sendens **geöffnet bleiben**.
 
-## Broadcast
+### 4. Zuhören
 
-To broadcast audio visit `http://localhost:<port>/publish.html` select your sound input device and press the publish button to start streaming.
-This project uses the WebApi for broadcasting. You can only broadcast from localhost with http. If you want to use it with another ip address or domain you have to use https. This is not part of this project.
+Die Zuhörer öffnen auf dem Handy die Adresse, die in der Verwaltung unter dem **Zahnrad oben rechts (Einstellungen) → Adresse für Zuhörer** steht, z. B.:
 
-## Listen
+```
+http://192.168.1.20
+```
 
-To listen to one stream just vist `http://<ip>:<port>` of your streaming server and press the play button.
+und tippen auf den **großen Knopf**. Das ist alles. Die Ringe um den Knopf bewegen sich mit dem Ton.
 
-## Stats
+> `localhost` funktioniert nur am Server-Computer selbst. Die Handys brauchen immer die Adresse aus den Einstellungen (die Netzwerk-Adresse des Computers).
 
-You can see statistic of connected clients with the `/stats.html` route: `http://<ip>:<port>/stats.html`
+- Gibt es nur **einen Kanal**, startet die Seite direkt in diesem Kanal.
+- Gibt es **mehrere Kanäle**, wählen die Zuhörer einmal ihren Kanal aus. Das Handy merkt sich die Wahl für das nächste Mal. Über **Kanal wechseln** (oben rechts) kann man jederzeit wechseln.
+- Hat die Übertragung noch nicht begonnen, steht dort „Bitte warten“. Sobald gesendet wird, geht es **von allein los**.
+- Oben rechts kann man zwischen **hell und dunkel** umschalten.
+
+> **Tipp:** Drucken Sie die Adresse groß aus oder machen Sie daraus einen QR-Code (z. B. mit einem kostenlosen QR-Code-Generator), den die Zuhörer nur abfotografieren müssen.
+
+---
+
+## Sprache und Darstellung der Verwaltung
+
+Über das **Zahnrad oben rechts** stellen Sie die Sprache der Verwaltung um (**Deutsch, Русский, English, Українська**) und wählen hell oder dunkel. Die Einstellung merkt sich der Browser. Die Sprache der Zuhörer-Seite hängt davon nicht ab – sie richtet sich nach der Sprache des Kanals.
+
+## Passwort für die Verwaltung (empfohlen)
+
+Ohne Passwort kann **jeder im WLAN** die Verwaltung öffnen. Über das **Zahnrad oben rechts → Admin-Passwort** legen Sie ein Passwort fest. Danach muss man sich in der Verwaltung einmal anmelden (die Anmeldung bleibt 30 Tage gespeichert). Zuhörer brauchen **kein** Passwort. Nach 5 falschen Versuchen ist die Anmeldung für eine Minute gesperrt.
+
+Passwort vergessen? Siehe [Häufige Fragen](#häufige-fragen).
+
+## Statistik
+
+Unter **Statistik** sehen Sie:
+
+- wie viele Zuhörer **pro Tag** durchschnittlich verbunden waren (und den Höchstwert),
+- den Durchschnitt pro **Wochentag** (Mo – So),
+- eine Tabelle mit allen Tagen und der Sendezeit.
+
+Gezählt wird **jede Minute, in der gesendet wird**. Der Durchschnitt wird in **ganzen Zuhörern** angegeben und nur über die Minuten berechnet, in denen mindestens eine Person zugehört hat. Hört also eine Person zu, steht dort „1“ – auch wenn die Übertragung schon vorher lief. Die Sendezeit in der Tabelle ist die gesamte Zeit, in der gesendet wurde. Sie können die Statistik für alle Kanäle zusammen oder für einen einzelnen Kanal ansehen. Die Statistik wird **400 Tage** aufbewahrt, ältere Tage werden automatisch gelöscht.
+
+---
+
+## Aktualisieren
+
+Ihre Kanäle, das Passwort und die Statistik bleiben bei einem Update erhalten.
+
+- **Windows:** [update-windows.cmd](https://raw.githubusercontent.com/ecg-media/stream/main/installer/update-windows.cmd) herunterladen und doppelklicken – oder `install-windows.cmd` einfach noch einmal starten.
+- **Mac und Linux:** Die Zeile aus der Installation einfach noch einmal ausführen:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo bash
+  ```
+
+## Deinstallieren
+
+- **Windows:** In einer Eingabeaufforderung `install-windows.cmd -Uninstall` ausführen.
+- **Mac und Linux:**
+  ```bash
+  sudo bash /opt/ecg-stream/app/installer/install.sh --uninstall
+  ```
+
+---
+
+## Häufige Fragen
+
+**Das Handy findet die Seite nicht.**
+Ist das Handy im **selben WLAN** wie der Computer (nicht im mobilen Netz / Gäste-WLAN)? Stimmt die Adresse (Zahnrad → Adresse für Zuhörer)? `localhost` funktioniert auf dem Handy nicht.
+
+**Die Seite lädt, aber es kommt kein Ton.**
+- Wird gesendet? In der Verwaltung muss beim Kanal **„Sendet“** stehen.
+- Ist das Handy auf lautlos oder die Lautstärke ganz unten?
+- Manche Gäste-WLANs verhindern, dass Geräte miteinander sprechen („Client-Isolation“). Dann ein anderes WLAN verwenden.
+
+**„Senden starten“ ist ausgegraut.**
+Die Verwaltung ist nicht direkt am Server-Computer unter `http://localhost/publish.html` geöffnet. Senden geht nur dort (oder über HTTPS, siehe unten).
+
+**Die Audioquelle fehlt in der Liste.**
+Gerät anschließen und die Seite neu laden. Beim ersten Mal muss der Mikrofon-Zugriff im Browser erlaubt werden.
+
+**Alle Zuhörer sollen die Seite neu laden (z. B. nach einem Update).**
+In der Verwaltung beim Kanal auf **Zuhörer neu laden** tippen.
+
+**Admin-Passwort vergessen.**
+Am Server-Computer:
+- Windows (Eingabeaufforderung als Administrator):
+  ```bat
+  sc stop EcgStream
+  set DATA_DIR=%ProgramData%\ecg-stream
+  "%ProgramFiles%\ecg-stream\node\node.exe" "%ProgramFiles%\ecg-stream\app\server\index.js" --set-password
+  sc start EcgStream
+  ```
+- Linux:
+  ```bash
+  sudo systemctl stop ecg-stream && sudo -u ecg-stream DATA_DIR=/opt/ecg-stream/data /opt/ecg-stream/node/bin/node /opt/ecg-stream/app/server/index.js --set-password; sudo systemctl start ecg-stream
+  ```
+- Mac:
+  ```bash
+  sudo launchctl bootout system/media.ecg.stream; DATA_DIR=/opt/ecg-stream/data /opt/ecg-stream/node/bin/node /opt/ecg-stream/app/server/index.js --set-password; sudo launchctl bootstrap system /Library/LaunchDaemons/media.ecg.stream.plist
+  ```
+Leer lassen und Enter drücken entfernt das Passwort.
+
+**Wo finde ich das Protokoll bei Problemen?**
+Windows: `C:\ProgramData\ecg-stream\server.log` · Linux: `journalctl -u ecg-stream` · Mac: `/var/log/ecg-stream.log`
+
+---
+
+## Für Fortgeschrittene
+
+### Einstellungen beim Installieren
+
+| Einstellung | Standard | Bedeutung |
+|---|---|---|
+| `PORT` | `80` | Port der Webseite |
+| `RTC_PORT` | `10000` | Port für den Ton (UDP und TCP) |
+| `IP` | automatisch | IP-Adresse, unter der Handys den Ton abholen. Nur setzen, wenn die automatische Erkennung die falsche Netzwerkkarte wählt. |
+| `DATA_DIR` | `data/` | Ordner für Kanäle, Passwort und Statistik |
+
+Beispiele:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo PORT=8080 IP=192.168.1.20 bash
+```
+
+```bat
+install-windows.cmd -Port 8080 -Ip 192.168.1.20
+```
+
+Die Firewall wird vom Installer für diese Ports geöffnet (unter Windows nur für das lokale Netz).
+
+### Zugriff von außen (Reverse Proxy)
+
+Das Programm ist **nur für lokale Netzwerke** gedacht und bringt bewusst kein HTTPS mit. Soll es von außen oder per HTTPS erreichbar sein, gehört ein Reverse Proxy (z. B. nginx, Caddy, Traefik) davor. Wichtig:
+
+- WebSockets müssen weitergeleitet werden (`/socket.io/`).
+- Der Ton läuft **nicht** über den Proxy, sondern direkt per WebRTC über `RTC_PORT` (UDP/TCP). Dieser Port muss von den Zuhörern erreichbar sein, und `IP` muss die von dort erreichbare Adresse sein.
+- Setzen Sie unbedingt ein Admin-Passwort.
+
+Beispiel für nginx:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:80;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+}
+```
+
+Über HTTPS kann auch von anderen Geräten aus gesendet werden.
+
+### Ohne Installer starten (Entwickler)
+
+Voraussetzung: [Node.js](https://nodejs.org) 22 oder neuer.
+
+```bash
+npm ci
+npm start
+```
+
+```bash
+npm test
+```
+
+Technische Details: [docs/architecture.md](docs/architecture.md).
 
 ## Credits
 
-This project is based on the broadcast example from https://github.com/mganeko/mediasoup_v3_example/
+Ursprünglich basierend auf dem Broadcast-Beispiel von https://github.com/mganeko/mediasoup_v3_example/.
+Icons: [Material Icons](https://github.com/google/material-design-icons) von Google (Apache License 2.0).
