@@ -1,170 +1,170 @@
-# Stream – Übersetzung live aufs Handy
+# Stream – live translation on your phone
 
-Mit diesem Programm hören Zuhörer eine Übersetzung (oder jeden anderen Ton) **live auf ihrem eigenen Handy** – ohne App, einfach im Browser. Ein Computer nimmt den Ton auf (z. B. vom Mischpult oder Mikrofon des Übersetzers) und schickt ihn über das WLAN an alle Handys. Der Ton kommt **ohne spürbare Verzögerung** an.
+With this program, listeners hear a translation (or any other audio) **live on their own phone** – no app needed, just the web browser. A computer picks up the sound (e.g. from the mixing desk or the translator's microphone) and sends it over Wi-Fi to all phones. The sound arrives **without noticeable delay**.
 
-- Für Zuhörer: Adresse öffnen, auf den großen Knopf tippen, fertig.
-- Mehrere Kanäle möglich, z. B. „Russisch“ und „Englisch“ gleichzeitig.
-- Texte für Zuhörer in 14 Sprachen: Deutsch, Englisch, Russisch, Ukrainisch, Persisch, Arabisch, Hebräisch, Türkisch, Rumänisch, Polnisch, Spanisch, Französisch, Armenisch, Georgisch.
-- Heller und dunkler Modus.
-- Statistik: Wie viele Zuhörer waren an welchem Tag im Durchschnitt da?
-- Funktioniert nur im eigenen Netzwerk (WLAN/LAN). Das Internet wird nur für die Installation und Updates gebraucht.
+- For listeners: open the address, tap the big button, done.
+- Several channels at once, e.g. "Russian" and "English".
+- Listener texts in 14 languages: German, English, Russian, Ukrainian, Persian, Arabic, Hebrew, Turkish, Romanian, Polish, Spanish, French, Armenian, Georgian.
+- Light and dark mode.
+- Statistics: how many listeners were connected on average on which day?
+- Works only in your own network (Wi-Fi/LAN). The internet is only needed for installation and updates.
 
-![So funktioniert es](diagram.svg)
+![How it works](diagram.svg)
 
 ---
 
-## Was Sie brauchen
+## What you need
 
-1. **Einen Computer**, der während des Gottesdienstes / der Veranstaltung läuft (Windows 10/11, Mac oder Linux).
-2. **Eine Tonquelle** an diesem Computer: Mikrofon, USB-Audio-Interface oder Kabel vom Mischpult.
-3. **Ein WLAN**, in dem der Computer und die Handys der Zuhörer sind.
+1. **A computer** that is running during the service / event (Windows 10/11, Mac or Linux).
+2. **An audio source** connected to this computer: microphone, USB audio interface or a cable from the mixing desk.
+3. **A Wi-Fi network** that the computer and the listeners' phones are connected to.
 
 ---
 
 ## Installation
 
-Die Installation dauert etwa 5 Minuten. Danach startet das Programm **automatisch**, sobald der Computer eingeschaltet wird.
+The installation takes about 5 minutes. Afterwards the program starts **automatically** whenever the computer is switched on.
 
 ### Windows
 
-1. Laden Sie die Datei [install-windows.cmd](https://raw.githubusercontent.com/ecg-media/stream/main/installer/install-windows.cmd) herunter (Rechtsklick auf den Link → „Link speichern unter …“).
-2. Doppelklick auf die heruntergeladene Datei.
-3. Falls Windows warnt („Der Computer wurde durch Windows geschützt“): auf **Weitere Informationen** → **Trotzdem ausführen** klicken.
-4. Die Frage nach Administratorrechten mit **Ja** beantworten.
-5. Warten, bis **„Fertig!“** erscheint. Dort stehen auch die Adressen für Zuhörer und Verwaltung.
+1. Download the file [install-windows.cmd](https://raw.githubusercontent.com/ecg-media/stream/main/installer/install-windows.cmd) (right-click the link → "Save link as …").
+2. Double-click the downloaded file.
+3. If Windows shows a warning ("Windows protected your PC"): click **More info** → **Run anyway**.
+4. Answer the question about administrator rights with **Yes**.
+5. Wait until **"Fertig!"** (done) appears. The addresses for listeners and for the administration are shown there as well.
 
 ### Mac
 
-1. Programm **Terminal** öffnen (Spotlight: `⌘ + Leertaste`, „Terminal“ eingeben).
-2. Diese Zeile hineinkopieren und Enter drücken:
+1. Open the **Terminal** app (Spotlight: `⌘ + Space`, type "Terminal").
+2. Paste this line and press Enter:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo bash
    ```
-3. Ihr Mac-Passwort eingeben (beim Tippen ist nichts zu sehen – das ist normal) und Enter drücken.
-4. Warten, bis **„Fertig!“** erscheint.
+3. Enter your Mac password (nothing is shown while typing – that is normal) and press Enter.
+4. Wait until **"Fertig!"** (done) appears.
 
 ### Linux (Ubuntu, Debian, Fedora, Raspberry Pi OS …)
 
-1. Ein Terminal öffnen.
-2. Diese Zeile hineinkopieren und Enter drücken:
+1. Open a terminal.
+2. Paste this line and press Enter:
    ```bash
    curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo bash
    ```
-3. Passwort eingeben und warten, bis **„Fertig!“** erscheint.
+3. Enter your password and wait until **"Fertig!"** (done) appears.
 
 ---
 
-## Erste Schritte
+## Getting started
 
-### 1. Verwaltung öffnen
+### 1. Open the administration
 
-Am **Computer, auf dem das Programm installiert ist**, im Browser (Chrome, Edge, Firefox oder Safari) diese Adresse öffnen:
+On the **computer where the program is installed**, open this address in the browser (Chrome, Edge, Firefox or Safari):
 
 ```
 http://localhost/publish.html
 ```
 
-> Senden geht aus Sicherheitsgründen der Browser **nur direkt an diesem Computer**. Kanäle bearbeiten und die Statistik ansehen geht auch von anderen Geräten aus (Adresse `http://<IP-Adresse>/publish.html`).
+> For security reasons, browsers allow sending **only directly on this computer**. Editing channels and viewing statistics also works from other devices (address `http://<IP address>/publish.html`).
 
-### 2. Kanal einrichten
+### 2. Set up a channel
 
-- Unter **Kanäle** ist schon ein Kanal „Übersetzung“ vorhanden.
-- Mit **Bearbeiten** geben Sie ihm einen Namen (z. B. „Russische Übersetzung“) und wählen die **gesprochene Sprache**. Die Zuhörer sehen dann alle Hinweise in dieser Sprache.
-- Mit **Kanal hinzufügen** (oben rechts) legen Sie weitere Kanäle an, z. B. für eine zweite Sprache.
+- Under **Channels** there is already a channel called "Übersetzung".
+- With **Edit** you give it a name (e.g. "Russian translation") and choose the **spoken language**. Listeners then see all hints in this language.
+- With **Add channel** (top right) you create more channels, e.g. for a second language.
 
-### 3. Senden
+### 3. Send
 
-- Bei dem Kanal die **Audioquelle** auswählen (beim ersten Mal fragt der Browser, ob er auf das Mikrofon zugreifen darf → **Erlauben**).
-- Kommt der Ton per Kabel vom **Mischpult**, das Häkchen **„Mischpult-Eingang“** setzen. Dann verändert der Browser den Ton nicht (keine Echo- und Rauschfilter). Bei einem einfachen Mikrofon das Häkchen weglassen.
-- Auf **Senden starten** tippen. Der farbige Balken zeigt, dass Ton ankommt.
-- Zum Schluss **Senden beenden**.
-- Die Seite der Verwaltung muss während des Sendens **geöffnet bleiben**.
+- Select the **audio source** for the channel (the first time, the browser asks whether it may access the microphone → **Allow**).
+- If the sound comes by cable from the **mixing desk**, tick **"Mixing desk input"**. The browser then leaves the sound untouched (no echo or noise filters). Leave it unticked for a simple microphone.
+- Tap **Start sending**. The coloured bar shows that sound is coming in.
+- When you are finished, tap **Stop sending**.
+- The administration page must **stay open** while sending.
 
-### 4. Zuhören
+### 4. Listen
 
-Die Zuhörer öffnen auf dem Handy die Adresse, die in der Verwaltung unter dem **Zahnrad oben rechts (Einstellungen) → Adresse für Zuhörer** steht, z. B.:
+Listeners open the address shown in the administration under the **gear icon at the top right (Settings) → Address for listeners** on their phone, e.g.:
 
 ```
 http://192.168.1.20
 ```
 
-und tippen auf den **großen Knopf**. Das ist alles. Die Ringe um den Knopf bewegen sich mit dem Ton.
+and tap the **big button**. That's all. The rings around the button move with the sound.
 
-> `localhost` funktioniert nur am Server-Computer selbst. Die Handys brauchen immer die Adresse aus den Einstellungen (die Netzwerk-Adresse des Computers).
+> `localhost` only works on the server computer itself. Phones always need the address from the settings (the network address of the computer).
 
-- Gibt es nur **einen Kanal**, startet die Seite direkt in diesem Kanal.
-- Gibt es **mehrere Kanäle**, wählen die Zuhörer einmal ihren Kanal aus. Das Handy merkt sich die Wahl für das nächste Mal. Über **Kanal wechseln** (oben rechts) kann man jederzeit wechseln.
-- Hat die Übertragung noch nicht begonnen, steht dort „Bitte warten“. Sobald gesendet wird, geht es **von allein los**.
-- Oben rechts kann man zwischen **hell und dunkel** umschalten.
+- If there is only **one channel**, the page opens that channel directly.
+- If there are **several channels**, listeners choose their channel once. The phone remembers the choice for next time. **Change channel** (top right) switches at any time.
+- If the broadcast has not started yet, the page says "please wait". As soon as sending starts, playback begins **automatically**.
+- The button at the top right switches between **light and dark**.
 
-> **Tipp:** Drucken Sie die Adresse groß aus oder machen Sie daraus einen QR-Code (z. B. mit einem kostenlosen QR-Code-Generator), den die Zuhörer nur abfotografieren müssen.
-
----
-
-## Sprache und Darstellung der Verwaltung
-
-Über das **Zahnrad oben rechts** stellen Sie die Sprache der Verwaltung um (**Deutsch, Русский, English, Українська**) und wählen hell oder dunkel. Die Einstellung merkt sich der Browser. Die Sprache der Zuhörer-Seite hängt davon nicht ab – sie richtet sich nach der Sprache des Kanals.
-
-## Passwort für die Verwaltung (empfohlen)
-
-Ohne Passwort kann **jeder im WLAN** die Verwaltung öffnen. Über das **Zahnrad oben rechts → Admin-Passwort** legen Sie ein Passwort fest. Danach muss man sich in der Verwaltung einmal anmelden (die Anmeldung bleibt 30 Tage gespeichert). Zuhörer brauchen **kein** Passwort. Nach 5 falschen Versuchen ist die Anmeldung für eine Minute gesperrt.
-
-Passwort vergessen? Siehe [Häufige Fragen](#häufige-fragen).
-
-## Statistik
-
-Unter **Statistik** sehen Sie:
-
-- wie viele Zuhörer **pro Tag** durchschnittlich verbunden waren (und den Höchstwert),
-- den Durchschnitt pro **Wochentag** (Mo – So),
-- eine Tabelle mit allen Tagen und der Sendezeit.
-
-Gezählt wird **jede Minute, in der gesendet wird**. Der Durchschnitt wird in **ganzen Zuhörern** angegeben und nur über die Minuten berechnet, in denen mindestens eine Person zugehört hat. Hört also eine Person zu, steht dort „1“ – auch wenn die Übertragung schon vorher lief. Die Sendezeit in der Tabelle ist die gesamte Zeit, in der gesendet wurde. Sie können die Statistik für alle Kanäle zusammen oder für einen einzelnen Kanal ansehen. Die Statistik wird **400 Tage** aufbewahrt, ältere Tage werden automatisch gelöscht.
+> **Tip:** Print the address in large letters or turn it into a QR code (e.g. with a free QR code generator) that listeners only have to scan.
 
 ---
 
-## Aktualisieren
+## Language and appearance of the administration
 
-Ihre Kanäle, das Passwort und die Statistik bleiben bei einem Update erhalten.
+Use the **gear icon at the top right** to change the language of the administration (**Deutsch, Русский, English, Українська**) and to choose light or dark. The browser remembers the setting. The language of the listener page does not depend on it – it follows the language of the channel.
 
-- **Windows:** [update-windows.cmd](https://raw.githubusercontent.com/ecg-media/stream/main/installer/update-windows.cmd) herunterladen und doppelklicken – oder `install-windows.cmd` einfach noch einmal starten.
-- **Mac und Linux:** Die Zeile aus der Installation einfach noch einmal ausführen:
+## Password for the administration (recommended)
+
+Without a password, **anyone on the Wi-Fi** can open the administration. Use the **gear icon at the top right → Admin password** to set a password. After that you sign in to the administration once (the sign-in is remembered for 30 days). Listeners do **not** need a password. After 5 wrong attempts, signing in is blocked for one minute.
+
+Forgot the password? See [Frequently asked questions](#frequently-asked-questions).
+
+## Statistics
+
+Under **Statistics** you see:
+
+- how many listeners were connected **per day** on average (and the maximum),
+- the average per **weekday** (Mon – Sun),
+- a table with all days and the airtime.
+
+A sample is taken **every minute while a channel is sending**. The average is given in **whole listeners** and is calculated only over the minutes in which at least one person was listening. So if one person listens, it shows "1" – even if the broadcast was running before. The airtime in the table is the whole time that was sent. You can view the statistics for all channels combined or for a single channel. Statistics are kept for **400 days**; older days are deleted automatically.
+
+---
+
+## Updating
+
+Your channels, the password and the statistics are kept during an update.
+
+- **Windows:** download [update-windows.cmd](https://raw.githubusercontent.com/ecg-media/stream/main/installer/update-windows.cmd) and double-click it – or simply run `install-windows.cmd` again.
+- **Mac and Linux:** simply run the installation line again:
   ```bash
   curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo bash
   ```
 
-## Deinstallieren
+## Uninstalling
 
-- **Windows:** In einer Eingabeaufforderung `install-windows.cmd -Uninstall` ausführen.
-- **Mac und Linux:**
+- **Windows:** run `install-windows.cmd -Uninstall` in a command prompt.
+- **Mac and Linux:**
   ```bash
   sudo bash /opt/ecg-stream/app/installer/install.sh --uninstall
   ```
 
 ---
 
-## Häufige Fragen
+## Frequently asked questions
 
-**Das Handy findet die Seite nicht.**
-Ist das Handy im **selben WLAN** wie der Computer (nicht im mobilen Netz / Gäste-WLAN)? Stimmt die Adresse (Zahnrad → Adresse für Zuhörer)? `localhost` funktioniert auf dem Handy nicht.
+**The phone cannot find the page.**
+Is the phone on the **same Wi-Fi** as the computer (not mobile data / guest Wi-Fi)? Is the address correct (gear icon → Address for listeners)? `localhost` does not work on the phone.
 
-**Die Seite lädt, aber es kommt kein Ton.**
-- Wird gesendet? In der Verwaltung muss beim Kanal **„Sendet“** stehen.
-- Ist das Handy auf lautlos oder die Lautstärke ganz unten?
-- Manche Gäste-WLANs verhindern, dass Geräte miteinander sprechen („Client-Isolation“). Dann ein anderes WLAN verwenden.
+**The page loads, but there is no sound.**
+- Is a channel sending? In the administration the channel must show **"Live"**.
+- Is the phone on silent or the volume all the way down?
+- Some guest Wi-Fi networks prevent devices from talking to each other ("client isolation"). Use a different Wi-Fi in that case.
 
-**„Senden starten“ ist ausgegraut.**
-Die Verwaltung ist nicht direkt am Server-Computer unter `http://localhost/publish.html` geöffnet. Senden geht nur dort (oder über HTTPS, siehe unten).
+**"Start sending" is greyed out.**
+The administration is not opened directly on the server computer at `http://localhost/publish.html`. Sending only works there (or over HTTPS, see below).
 
-**Die Audioquelle fehlt in der Liste.**
-Gerät anschließen und die Seite neu laden. Beim ersten Mal muss der Mikrofon-Zugriff im Browser erlaubt werden.
+**The audio source is missing from the list.**
+Connect the device and reload the page. The first time, microphone access must be allowed in the browser.
 
-**Alle Zuhörer sollen die Seite neu laden (z. B. nach einem Update).**
-In der Verwaltung beim Kanal auf **Zuhörer neu laden** tippen.
+**All listeners should reload the page (e.g. after an update).**
+In the administration, tap **Reload listeners** on the channel.
 
-**Admin-Passwort vergessen.**
-Am Server-Computer:
-- Windows (Eingabeaufforderung als Administrator):
+**Forgot the admin password.**
+On the server computer:
+- Windows (command prompt as administrator):
   ```bat
   sc stop EcgStream
   set DATA_DIR=%ProgramData%\ecg-stream
@@ -179,45 +179,45 @@ Am Server-Computer:
   ```bash
   sudo launchctl bootout system/media.ecg.stream; DATA_DIR=/opt/ecg-stream/data /opt/ecg-stream/node/bin/node /opt/ecg-stream/app/server/index.js --set-password; sudo launchctl bootstrap system /Library/LaunchDaemons/media.ecg.stream.plist
   ```
-Leer lassen und Enter drücken entfernt das Passwort.
+Leaving it empty and pressing Enter removes the password.
 
-**Wo finde ich das Protokoll bei Problemen?**
+**Where do I find the log when there are problems?**
 Windows: `C:\ProgramData\ecg-stream\server.log` · Linux: `journalctl -u ecg-stream` · Mac: `/var/log/ecg-stream.log`
 
 ---
 
-## Für Fortgeschrittene
+## Advanced
 
-### Einstellungen beim Installieren
+### Settings during installation
 
-| Einstellung | Standard | Bedeutung |
+| Setting | Default | Meaning |
 |---|---|---|
-| `PORT` | `80` | Port der Webseite |
-| `RTC_PORT` | `10000` | Port für den Ton (UDP und TCP) |
-| `IP` | automatisch | IP-Adresse, unter der Handys den Ton abholen. Nur setzen, wenn die automatische Erkennung die falsche Netzwerkkarte wählt. |
-| `DATA_DIR` | `data/` | Ordner für Kanäle, Passwort und Statistik |
+| `PORT` | `80` | Port of the web page |
+| `RTC_PORT` | `10000` | Port for the audio (UDP and TCP) |
+| `IP` | automatic | IP address from which phones fetch the audio. Only set it if the automatic detection picks the wrong network adapter. |
+| `DATA_DIR` | `data/` | Folder for channels, password and statistics |
 
-Beispiele:
+Examples:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo PORT=8080 IP=192.168.1.20 bash
+curl -fsSL https://raw.githubusercontent.com/ecg-media/stream/main/installer/install.sh | sudo PORT=8080 RTC_PORT=10002 IP=192.168.1.20 bash
 ```
 
 ```bat
-install-windows.cmd -Port 8080 -Ip 192.168.1.20
+install-windows.cmd -Port 8080 -RtcPort 10002 -Ip 192.168.1.20
 ```
 
-Die Firewall wird vom Installer für diese Ports geöffnet (unter Windows nur für das lokale Netz).
+To change the ports later, run the installer again with the new values. The installer opens the firewall for these ports (on Windows only for the local network). It sets up exactly one service; several instances on one computer are only possible with a manual start, each with its own `PORT`, `RTC_PORT` and `DATA_DIR` – with channels this is usually no longer necessary.
 
-### Zugriff von außen (Reverse Proxy)
+### Access from outside (reverse proxy)
 
-Das Programm ist **nur für lokale Netzwerke** gedacht und bringt bewusst kein HTTPS mit. Soll es von außen oder per HTTPS erreichbar sein, gehört ein Reverse Proxy (z. B. nginx, Caddy, Traefik) davor. Wichtig:
+The program is meant **only for local networks** and deliberately does not include HTTPS. If it should be reachable from outside or via HTTPS, put a reverse proxy (e.g. nginx, Caddy, Traefik) in front of it. Important:
 
-- WebSockets müssen weitergeleitet werden (`/socket.io/`).
-- Der Ton läuft **nicht** über den Proxy, sondern direkt per WebRTC über `RTC_PORT` (UDP/TCP). Dieser Port muss von den Zuhörern erreichbar sein, und `IP` muss die von dort erreichbare Adresse sein.
-- Setzen Sie unbedingt ein Admin-Passwort.
+- WebSockets must be forwarded (`/socket.io/`).
+- The audio does **not** go through the proxy but directly via WebRTC over `RTC_PORT` (UDP/TCP). This port must be reachable for listeners, and `IP` must be the address that is reachable from there.
+- Be sure to set an admin password.
 
-Beispiel für nginx:
+Example for nginx:
 
 ```nginx
 location / {
@@ -229,11 +229,11 @@ location / {
 }
 ```
 
-Über HTTPS kann auch von anderen Geräten aus gesendet werden.
+Over HTTPS, sending also works from other devices.
 
-### Ohne Installer starten (Entwickler)
+### Starting without the installer (developers)
 
-Voraussetzung: [Node.js](https://nodejs.org) 22 oder neuer.
+Requirement: [Node.js](https://nodejs.org) 22 or newer.
 
 ```bash
 npm ci
@@ -241,12 +241,16 @@ npm start
 ```
 
 ```bash
+PORT=8080 RTC_PORT=10002 npm start
+```
+
+```bash
 npm test
 ```
 
-Technische Details: [docs/architecture.md](docs/architecture.md).
+Technical details: [docs/architecture.md](docs/architecture.md).
 
 ## Credits
 
-Ursprünglich basierend auf dem Broadcast-Beispiel von https://github.com/mganeko/mediasoup_v3_example/.
-Icons: [Material Icons](https://github.com/google/material-design-icons) von Google (Apache License 2.0).
+Originally based on the broadcast example from https://github.com/mganeko/mediasoup_v3_example/.
+Icons: [Material Icons](https://github.com/google/material-design-icons) by Google (Apache License 2.0).
