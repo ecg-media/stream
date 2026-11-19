@@ -1,6 +1,6 @@
 # Architecture
 
-Developer notes for the stream server. User documentation is in the [README](../README.md) (German).
+Developer notes for the stream server. User documentation is in the [README](../README.md).
 
 ## Overview
 
