@@ -82,6 +82,194 @@ test('detectIp prefers physical adapters', () => {
   assert.equal(server.detectIp({ lo: nic('127.0.0.1', true) }), undefined);
 });
 
+test('capture devices are parsed from ALSA, DirectShow and AVFoundation output', () => {
+  const cards = ' 0 [PCH            ]: HDA-Intel - HDA Intel PCH\n                      HDA Intel PCH at 0xf7f10000 irq 31\n'
+    + ' 1 [U192k          ]: USB-Audio - UMC1820\n                      BEHRINGER UMC1820 at usb-0000:00:14.0-2, high speed\n';
+  const pcm = '00-00: ALC892 Analog : ALC892 Analog : playback 1 : capture 1\n00-01: ALC892 Digital : ALC892 Digital : playback 1\n'
+    + '01-00: USB Audio : USB Audio : playback 1 : capture 1\n';
+  const stream = 'Playback:\n  Status: Stop\n    Channels: 10\nCapture:\n  Status: Stop\n    Channels: 8\n';
+  assert.deepEqual(server.parseAlsaDevices(cards, pcm, (card, dev) => (card === 1 && dev === 0 ? stream : '')), [
+    { id: 'plughw:CARD=PCH,DEV=0', name: 'HDA Intel PCH – ALC892 Analog', inputs: 2 },
+    { id: 'plughw:CARD=U192k,DEV=0', name: 'UMC1820 – USB Audio', inputs: 8 },
+  ]);
+  assert.deepEqual(server.parseAlsaDevices('', ''), []);
+
+  const dshow = '[dshow @ 0] "Mic in at rear panel (Pink) (Realtek(R) Audio)" (audio)\n[dshow @ 0]   Alternative name "@device_cm_{X}"\n[dshow @ 0] "CABLE Output" (audio)\n';
+  assert.deepEqual(server.parseDeviceNames(dshow), ['Mic in at rear panel (Pink) (Realtek(R) Audio)', 'CABLE Output']);
+  const avf = '[AVFoundation indev @ 0] AVFoundation video devices:\n[AVFoundation indev @ 0] [0] FaceTime HD Camera\n'
+    + '[AVFoundation indev @ 0] AVFoundation audio devices:\n[AVFoundation indev @ 0] [0] MacBook Pro Microphone\n[AVFoundation indev @ 0] [1] Scarlett 18i20 USB\n';
+  assert.deepEqual(server.parseDeviceNames(avf), ['MacBook Pro Microphone', 'Scarlett 18i20 USB']);
+
+  assert.equal(server.parseChannelCount('  ch= 2, bits=16, rate= 44100\n  ch= 1, bits=16, rate= 44100\n'), 2);
+  assert.equal(server.parseChannelCount('Stream #0:0: Audio: pcm_f32le, 48000 Hz, 18 channels, flt'), 18);
+  assert.equal(server.parseChannelCount('Stream #0:0: Audio: pcm_f32le, 48000 Hz, mono, flt'), 1);
+  assert.equal(server.parseChannelCount('nothing'), 2);
+});
+
+test('captureArgs splits one device into one low-latency Opus RTP stream per channel', () => {
+  const args = server.captureArgs('plughw:CARD=U192k,DEV=0', 8, [
+    { input: 3, port: 40000, rtpPort: 40010, rtcpPort: 40011, ssrc: 1234 },
+    { input: 0, port: 40001, rtpPort: 40012, rtcpPort: 40013, ssrc: 5678 },
+  ], ['-f', 'alsa', '-i', 'plughw:CARD=U192k,DEV=0']);
+  assert.equal(args[args.indexOf('-filter_complex') + 1], '[0:a]aresample=48000,asetpts=N/SR/TB,asplit=3[s0][s1][meter];[s0]pan=mono|c0=c2[o0];[s1]pan=stereo|c0=c0|c1=c1[o1];'
+    + '[meter]asetnsamples=n=4800,astats=metadata=1:reset=1:measure_perchannel=Peak_level:measure_overall=none,ametadata=mode=print:file=-:direct=1,anullsink');
+  assert.deepEqual(args.filter((a) => a.startsWith('rtp://')), [
+    'rtp://127.0.0.1:40000?localrtpport=40010&localrtcpport=40011&pkt_size=1200',
+    'rtp://127.0.0.1:40001?localrtpport=40012&localrtcpport=40013&pkt_size=1200',
+  ]);
+  assert.deepEqual(args.filter((a, i) => args[i - 1] === '-frame_duration'), ['10', '10']);
+  assert.deepEqual(args.filter((a, i) => args[i - 1] === '-application'), ['lowdelay', 'lowdelay']);
+  assert.deepEqual(args.filter((a, i) => args[i - 1] === '-ssrc'), ['1234', '5678']);
+});
+
+test('server: capture from a server audio device', { skip: !hasFfmpeg() && 'ffmpeg is not installed' }, async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stream-test-'));
+  const sine = { id: 'sine', name: 'Test tone', inputs: 2 };
+  const broken = { id: 'broken', name: 'Unplugged', inputs: 1 };
+  const { server: http, close } = await server.start({
+    port: 0, host: '127.0.0.1', rtcPort: 10901, announcedIp: '127.0.0.1', dataDir,
+    listDevices: async () => [sine, broken],
+    // input 2 is 20 dB quieter than input 1
+    captureSource: (device) => (device === 'sine' ? ['-re', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000,pan=stereo|c0=c0|c1=0.1*c0'] : ['-f', 'lavfi', '-i', 'nosuchfilter']),
+  });
+  const socket = io(`http://127.0.0.1:${http.address().port}`, { transports: ['websocket'], forceNew: true });
+  t.after(async () => {
+    socket.close();
+    await close();
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+  const request = (event, data = {}) => new Promise((resolve, reject) => {
+    socket.emit(event, data, (err, result) => (err ? reject(new Error(err)) : resolve(result)));
+  });
+  const channel = async (id) => (await request('admin:state')).channels.find((c) => c.id === id);
+
+  assert.deepEqual((await request('admin:devices')).devices, [sine, broken]);
+  const first = (await request('admin:state')).channels[0];
+  const second = await request('admin:saveChannel', { name: 'English', language: 'en' });
+  const third = await request('admin:saveChannel', { name: 'Broken', language: 'en' });
+  await assert.rejects(request('admin:startCapture', { channelId: first.id, device: 'missing', input: 1 }), /device_not_found/);
+  await assert.rejects(request('admin:startCapture', { channelId: first.id, device: 'sine', input: 3 }), /device_not_found/);
+  await assert.rejects(request('admin:startCapture', { channelId: third.id, device: 'broken', input: 0 }), /device_not_found/);
+
+  // two channels share one device; any admin can stop them; the choice is remembered
+  await request('admin:startCapture', { channelId: first.id, device: 'sine', input: 2 });
+  await request('admin:startCapture', { channelId: second.id, device: 'sine', input: 0 });
+  await assert.rejects(request('admin:startCapture', { channelId: first.id, device: 'sine', input: 1 }), /already_live/);
+  await assert.rejects(request('admin:publish', { channelId: first.id }), /already_live/);
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.deepEqual((await channel(first.id)).capture, { device: 'sine', input: 2, error: null });
+  assert.equal((await channel(second.id)).live, true);
+
+  // level meters: about 10 updates per second with the peak of the chosen input (-18 dBFS / -38 dBFS)
+  const updates = [];
+  const collect = (levels) => updates.push(levels);
+  socket.on('admin:levels', collect);
+  await new Promise((r) => setTimeout(r, 1000));
+  socket.off('admin:levels', collect);
+  assert.ok(updates.length >= 8, `${updates.length} level updates`);
+  const last = updates.at(-1);
+  assert.ok(Math.abs(last[first.id] - 0.24) < 0.05, `input 2 level ${last[first.id]}`);
+  assert.ok(Math.abs(last[second.id] - 0.64) < 0.05, `stereo level ${last[second.id]}`);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf8')).channels[1].source, { device: 'sine', input: 0, inputs: 2, live: true });
+
+  // a failing device reports its error and keeps the channel live for listeners
+  await request('admin:startCapture', { channelId: third.id, device: 'broken', input: 1 });
+  await new Promise((r) => setTimeout(r, 800));
+  assert.match((await channel(third.id)).capture.error, /not found/i);
+
+  await request('admin:stopPublish', { channelId: first.id });
+  await request('admin:stopPublish', { channelId: third.id });
+  assert.equal((await channel(first.id)).live, false);
+  assert.equal((await channel(first.id)).capture, null);
+  assert.equal((await channel(second.id)).live, true);
+
+  // a source port taken by another program before ffmpeg binds it does not stop the capture
+  const dgram = require('dgram');
+  const blocker = dgram.createSocket('udp4');
+  await new Promise((resolve) => blocker.bind(0, '127.0.0.1', resolve));
+  const taken = blocker.address().port;
+  const address = dgram.Socket.prototype.address;
+  dgram.Socket.prototype.address = function patched() {
+    dgram.Socket.prototype.address = address;
+    return { ...address.call(this), port: taken };
+  };
+  try {
+    await request('admin:startCapture', { channelId: first.id, device: 'sine', input: 1 });
+  } finally {
+    dgram.Socket.prototype.address = address;
+  }
+  await new Promise((r) => setTimeout(r, 4500));
+  assert.deepEqual((await channel(first.id)).capture, { device: 'sine', input: 1, error: null });
+  blocker.close();
+});
+
+test('server: captures that were sending continue after a restart', { skip: !hasFfmpeg() && 'ffmpeg is not installed' }, async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stream-test-'));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const run = async (steps) => {
+    const { server: http, close } = await server.start({
+      port: 0, host: '127.0.0.1', rtcPort: 10902, announcedIp: '127.0.0.1', dataDir,
+      listDevices: async () => [{ id: 'sine', name: 'Test tone', inputs: 2 }],
+      captureSource: () => ['-re', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000,aformat=channel_layouts=stereo'],
+    });
+    const socket = io(`http://127.0.0.1:${http.address().port}`, { transports: ['websocket'], forceNew: true });
+    const request = (event, data = {}) => new Promise((resolve, reject) => {
+      socket.emit(event, data, (err, result) => (err ? reject(new Error(err)) : resolve(result)));
+    });
+    try {
+      await new Promise((r) => setTimeout(r, 1000));
+      return await steps(request, (await request('admin:state')).channels);
+    } finally {
+      socket.close();
+      await close();
+    }
+  };
+
+  const channelId = await run(async (request, [channel]) => {
+    await request('admin:startCapture', { channelId: channel.id, device: 'sine', input: 2 });
+    return channel.id;
+  });
+  // the service was stopped while sending: the channel is live again with the same input, without an admin
+  await run(async (request, [channel]) => {
+    assert.equal(channel.id, channelId);
+    assert.equal(channel.live, true);
+    assert.deepEqual(channel.capture, { device: 'sine', input: 2, error: null });
+    await request('admin:stopPublish', { channelId });
+  });
+  // a channel stopped by an admin stays off
+  await run(async (request, [channel]) => {
+    assert.equal(channel.live, false);
+    assert.deepEqual(channel.source, { device: 'sine', input: 2, inputs: 2, live: false });
+  });
+});
+
+test('capture RTP timestamps follow the sample count even when device timestamps jitter', { skip: !hasFfmpeg() && 'ffmpeg is not installed' }, async () => {
+  const dgram = require('dgram');
+  const socket = dgram.createSocket('udp4');
+  await new Promise((resolve) => socket.bind(0, '127.0.0.1', resolve));
+  const { port } = socket.address();
+  const timestamps = [];
+  socket.on('message', (packet) => timestamps.push(packet.readUInt32BE(4)));
+  // 10 ms blocks at 44.1 kHz whose timestamps are off by up to 3 ms, like DirectShow devices deliver them
+  const source = ['-re', '-f', 'lavfi', '-i', "sine=sample_rate=44100,asetnsamples=n=441,asetpts='PTS+0.003*random(0)/TB'"];
+  const ffmpeg = require('child_process').spawn('ffmpeg', server.captureArgs('test', 1, [{ input: 1, port, rtpPort: port + 1, rtcpPort: port + 2, ssrc: 1 }], source));
+  await new Promise((r) => setTimeout(r, 2000));
+  ffmpeg.kill();
+  socket.close();
+  const steps = new Set(timestamps.slice(1).map((ts, i) => (ts - timestamps[i]) >>> 0));
+  assert.ok(timestamps.length > 50, `${timestamps.length} packets`);
+  assert.deepEqual([...steps], [480]);
+});
+
+function hasFfmpeg() {
+  try {
+    require('child_process').execFileSync(process.env.FFMPEG || 'ffmpeg', ['-version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 test('server: channels, auth guard, listening and statistics', async (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stream-test-'));
   const { server: http, close } = await server.start({ port: 0, host: '127.0.0.1', rtcPort: 10900, announcedIp: '127.0.0.1', dataDir });

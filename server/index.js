@@ -1,10 +1,12 @@
 'use strict';
 
 const crypto = require('crypto');
+const dgram = require('dgram');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
+const { spawn, execFile } = require('child_process');
 const { promisify } = require('util');
 const express = require('express');
 const mediasoup = require('mediasoup');
@@ -19,6 +21,8 @@ const STATS_KEEP_DAYS = 400;
 const SESSION_DAYS = 30;
 const LOGIN_ATTEMPTS = 5;
 const MEDIA_CODECS = [{ kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 }];
+const CAPTURE_PAYLOAD_TYPE = 101;
+const CAPTURE_RETRY_MS = 3000;
 
 function defaultConfig() {
   return {
@@ -151,9 +155,99 @@ function detectIp(interfaces = os.networkInterfaces()) {
   return (candidates.find((c) => !virtual.test(c.name)) || candidates[0])?.address;
 }
 
+/** Returns the ALSA capture devices listed in /proc/asound/cards and /proc/asound/pcm as [{ id, name, inputs }]. */
+function parseAlsaDevices(cards, pcm, streamInfo = () => '') {
+  const names = {};
+  for (const m of cards.matchAll(/^\s*(\d+) \[(\S+)\s*\]: .* - (.+)$/gm)) names[Number(m[1])] = { id: m[2], name: m[3].trim() };
+  const devices = [];
+  for (const m of pcm.matchAll(/^(\d+)-(\d+): ([^:]*?) :.*capture \d+/gm)) {
+    const card = names[Number(m[1])];
+    if (!card) continue;
+    const dev = Number(m[2]);
+    const inputs = Number(/Capture:[\s\S]*?Channels: (\d+)/.exec(streamInfo(Number(m[1]), dev))?.[1]) || 2;
+    devices.push({ id: `plughw:CARD=${card.id},DEV=${dev}`, name: `${card.name} – ${m[3].trim()}`, inputs });
+  }
+  return devices;
+}
+
+/** Returns the audio device names from the output of `ffmpeg -list_devices true` (dshow or avfoundation). */
+function parseDeviceNames(output) {
+  const dshow = [...output.matchAll(/"(.+)" \(audio\)/g)].map((m) => m[1]);
+  if (dshow.length) return dshow;
+  const section = output.split('AVFoundation audio devices:')[1] || '';
+  return [...section.matchAll(/\] \[\d+\] (.+)$/gm)].map((m) => m[1].trim());
+}
+
+/** Returns the highest channel count named in ffmpeg device options or stream info (default 2). */
+function parseChannelCount(output) {
+  const counts = [...output.matchAll(/ch=\s*(\d+)|Audio: .*?Hz, (?:(\d+) channels|(mono)|(stereo))/g)]
+    .map((m) => Number(m[1] || m[2]) || (m[3] ? 1 : 2));
+  return counts.length ? Math.max(...counts) : 2;
+}
+
+/**
+ * Returns the ffmpeg arguments that capture one device and send each output as Opus RTP to a local port.
+ * outputs: [{ input, port, rtpPort, rtcpPort, ssrc }] where input is 1-based (mono) or 0 (inputs 1+2 as stereo).
+ * A separate branch prints the peak level of every input ten times per second to stdout.
+ */
+function captureArgs(device, inputs, outputs, source = captureSource(device, inputs)) {
+  // Device timestamps jitter (DirectShow); RTP timestamps must follow the sample count or playback stutters.
+  const filters = [`[0:a]aresample=48000,asetpts=N/SR/TB,asplit=${outputs.length + 1}${outputs.map((_, i) => `[s${i}]`).join('')}[meter]`,
+    ...outputs.map(({ input }, i) => `[s${i}]${input ? `pan=mono|c0=c${input - 1}` : 'pan=stereo|c0=c0|c1=c1'}[o${i}]`),
+    '[meter]asetnsamples=n=4800,astats=metadata=1:reset=1:measure_perchannel=Peak_level:measure_overall=none,ametadata=mode=print:file=-:direct=1,anullsink'];
+  return ['-hide_banner', '-nostdin', '-loglevel', 'error', '-fflags', 'nobuffer', '-flags', 'low_delay', '-probesize', '32', '-analyzeduration', '0',
+    ...source, '-filter_complex', filters.join(';'),
+    ...outputs.flatMap(({ input, port, rtpPort, rtcpPort, ssrc }, i) => ['-map', `[o${i}]`, '-ar', 48000,
+      '-c:a', 'libopus', '-application', 'lowdelay', '-frame_duration', 10, '-b:a', input ? '64k' : '128k',
+      '-payload_type', CAPTURE_PAYLOAD_TYPE, '-ssrc', ssrc, '-rtpflags', 'skip_rtcp',
+      '-f', 'rtp', `rtp://127.0.0.1:${port}?localrtpport=${rtpPort}&localrtcpport=${rtcpPort}&pkt_size=1200`]),
+  ].map(String);
+}
+
+function peakToLevel(db) {
+  const value = (Number(db) + 50) / 50;
+  return Number.isFinite(value) ? Math.round(Math.min(1, Math.max(0, value)) * 100) / 100 : 0;
+}
+
+function captureSource(device, inputs, platform = process.platform) {
+  if (platform === 'linux') return ['-f', 'alsa', '-channels', inputs, '-sample_rate', 48000, '-i', device];
+  if (platform === 'win32') return ['-f', 'dshow', '-audio_buffer_size', 10, '-channels', inputs, '-i', `audio=${device}`];
+  if (platform === 'darwin') return ['-f', 'avfoundation', '-i', `:${device}`];
+  throw new Error('capture_unsupported');
+}
+
+/** Lists the audio inputs of this computer as [{ id, name, inputs }]; throws ffmpeg_missing without ffmpeg. */
+async function listCaptureDevices(ffmpeg, platform = process.platform) {
+  const run = (args) => new Promise((resolve, reject) => execFile(ffmpeg, ['-hide_banner', ...args], { timeout: 5000, windowsHide: true },
+    (err, stdout, stderr) => (err?.code === 'ENOENT' ? reject(new Error('ffmpeg_missing')) : resolve(`${stdout}${stderr}`))));
+  if (platform === 'linux') {
+    await run(['-version']);
+    const read = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return ''; } };
+    return parseAlsaDevices(read('/proc/asound/cards'), read('/proc/asound/pcm'), (card, dev) => read(`/proc/asound/card${card}/stream${dev}`));
+  }
+  const format = platform === 'win32' ? 'dshow' : 'avfoundation';
+  const names = parseDeviceNames(await run(['-f', format, '-list_devices', 'true', '-i', platform === 'win32' ? 'dummy' : '']));
+  return Promise.all(names.map(async (name) => {
+    const probe = platform === 'win32' ? ['-f', 'dshow', '-list_options', 'true', '-i', `audio=${name}`] : ['-f', 'avfoundation', '-i', `:${name}`, '-t', '0.1', '-f', 'null', '-'];
+    return { id: name, name, inputs: parseChannelCount(await run(probe)) };
+  }));
+}
+
+async function freeUdpPorts(count) {
+  const sockets = await Promise.all(Array.from({ length: count }, () => new Promise((resolve, reject) => {
+    const socket = dgram.createSocket('udp4');
+    socket.once('error', reject);
+    socket.bind(0, '127.0.0.1', () => resolve(socket));
+  })));
+  const ports = sockets.map((s) => s.address().port);
+  sockets.forEach((s) => s.close());
+  return ports;
+}
+
 /**
  * Starts the streaming server and resolves with { server, close } once it listens.
- * Options: port, host, rtcPort, announcedIp, dataDir.
+ * Options: port, host, rtcPort, announcedIp, dataDir, ffmpeg (path), listDevices and captureSource (replace the
+ * device listing and the ffmpeg input arguments, e.g. for tests).
  */
 async function start({
   port = Number(process.env.PORT) || 80,
@@ -161,6 +255,9 @@ async function start({
   rtcPort = Number(process.env.RTC_PORT) || 10000,
   announcedIp = process.env.IP,
   dataDir = process.env.DATA_DIR || path.join(__dirname, '..', 'data'),
+  ffmpeg = process.env.FFMPEG || 'ffmpeg',
+  listDevices = () => listCaptureDevices(ffmpeg),
+  captureSource: sourceArgs = captureSource,
 } = {}) {
   // At boot the service may start before the network has an address.
   for (let i = 0; !announcedIp && i < 30; i++) {
@@ -223,7 +320,7 @@ async function start({
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'no-referrer',
-      'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:",
+      'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data:; connect-src 'self' ws: wss:",
     });
     next();
   });
@@ -235,13 +332,18 @@ async function start({
   const server = http.createServer(app);
   const io = new Server(server, { serveClient: false });
 
-  const publicChannels = () => config.channels.map((c) => ({ ...c, live: live.has(c.id) }));
+  const publicChannels = () => config.channels.map(({ id, name, language }) => ({ id, name, language, live: live.has(id) }));
+  const captureState = (channelId) => {
+    const group = devices.get(live.get(channelId)?.device);
+    const output = group?.channels.get(channelId);
+    return output ? { device: group.id, input: output.input, error: group.error } : null;
+  };
   const adminState = () => ({
     title: config.title,
     passwordSet: !!config.auth,
     languages: LANGUAGES,
     addresses: announcedIp && !announcedIp.startsWith('127.') ? [`http://${announcedIp}${port === 80 ? '' : `:${port}`}`] : [],
-    channels: config.channels.map((c) => ({ ...c, live: live.has(c.id), publisher: live.get(c.id)?.socketId || null, listeners: listenerCount(c.id) })),
+    channels: config.channels.map((c) => ({ ...c, live: live.has(c.id), publisher: live.get(c.id)?.socketId || null, capture: captureState(c.id), listeners: listenerCount(c.id) })),
   });
   const broadcastChannels = () => {
     io.emit('channels', { title: config.title, channels: publicChannels() });
@@ -260,6 +362,119 @@ async function start({
     if (!entry) return;
     live.delete(channelId);
     entry.transport.close();
+    broadcastChannels();
+  }
+
+  // ---- server-side capture: one ffmpeg process per device sends one Opus RTP stream per channel ----
+  const devices = new Map();
+  let deviceList = null;
+  const captureDevices = () => {
+    if (!deviceList || deviceList.time < Date.now() - 5000) deviceList = { time: Date.now(), list: listDevices() };
+    return deviceList.list;
+  };
+
+  function runDevice(group) {
+    clearTimeout(group.timer);
+    group.queue = group.queue.then(async () => {
+      if (group.proc) {
+        const old = group.proc;
+        group.proc = null;
+        old.kill();
+        await old.done;
+      }
+      if (!group.channels.size) {
+        if (devices.get(group.id) === group) devices.delete(group.id);
+        return;
+      }
+      const proc = spawn(ffmpeg, captureArgs(group.id, group.inputs, [...group.channels.values()], sourceArgs(group.id, group.inputs)),
+        { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+      group.proc = proc;
+      let log = '';
+      let meter = '';
+      proc.stderr.on('data', (chunk) => { log = (log + chunk).slice(-1000); });
+      proc.stdout.on('data', (chunk) => {
+        const lines = (meter + chunk).split('\n');
+        meter = lines.pop();
+        for (const line of lines) {
+          const m = /astats\.(\d+)\.Peak_level=(\S+)/.exec(line);
+          if (m) group.levels[m[1] - 1] = peakToLevel(m[2]);
+        }
+      });
+      proc.on('error', (err) => { log = err.code === 'ENOENT' ? 'ffmpeg_missing' : err.message; });
+      proc.done = new Promise((resolve) => proc.on('close', resolve));
+      setTimeout(() => {
+        if (group.proc === proc && group.error) {
+          group.error = null;
+          pushAdminState();
+        }
+      }, 1000);
+      proc.done.then(async (code) => {
+        group.levels = [];
+        if (group.proc !== proc) return;
+        group.proc = null;
+        group.error = log.trim().split(/\r?\n/).pop() || `ffmpeg exited with code ${code}`;
+        console.error(`Capture from ${group.id} stopped: ${group.error}`);
+        pushAdminState();
+        if (/bind failed|address already in use/i.test(log)) await renewOutputs(group).catch((err) => console.error('Could not renew capture ports:', err.message));
+        if (devices.get(group.id) === group) group.timer = setTimeout(() => runDevice(group), CAPTURE_RETRY_MS);
+      });
+    }).catch((err) => console.error(`Capture from ${group.id} failed:`, err.message));
+  }
+
+  async function openOutput(input) {
+    const transport = await router.createPlainTransport({ listenInfo: { protocol: 'udp', ip: '127.0.0.1' }, rtcpMux: true, comedia: false });
+    try {
+      // ffmpeg sends from fixed local ports, so a restarted process reaches the same transport.
+      const [rtpPort, rtcpPort] = await freeUdpPorts(2);
+      await transport.connect({ ip: '127.0.0.1', port: rtpPort });
+      const ssrc = crypto.randomInt(1, 2 ** 31);
+      const producer = await transport.produce({
+        kind: 'audio',
+        rtpParameters: { codecs: [{ mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: CAPTURE_PAYLOAD_TYPE }], encodings: [{ ssrc }] },
+      });
+      return { input, port: transport.tuple.localPort, rtpPort, rtcpPort, ssrc, transport, producer };
+    } catch (err) {
+      transport.close();
+      throw err;
+    }
+  }
+
+  function attachOutput(channelId, group, output) {
+    const { transport, producer } = output;
+    live.set(channelId, { producer, transport, socketId: null, device: group.id });
+    group.channels.set(channelId, output);
+    transport.observer.on('close', () => {
+      if (live.get(channelId)?.producer === producer) stopPublishing(channelId);
+      if (group.channels.get(channelId) !== output) return;
+      group.channels.delete(channelId);
+      runDevice(group);
+    });
+  }
+
+  // Another program took a source port before ffmpeg could bind it: every channel of the device gets new ports.
+  async function renewOutputs(group) {
+    for (const [channelId, old] of group.channels) {
+      const output = await openOutput(old.input);
+      if (group.channels.get(channelId) !== old) {
+        output.transport.close();
+        continue;
+      }
+      attachOutput(channelId, group, output);
+      old.transport.close();
+    }
+    broadcastChannels();
+  }
+
+  async function startCapture(channelId, device, input) {
+    const output = await openOutput(input);
+    if (live.has(channelId) || !findChannel(channelId)) {
+      output.transport.close();
+      throw new Error('already_live');
+    }
+    const group = devices.get(device.id) || { id: device.id, inputs: device.inputs, channels: new Map(), proc: null, timer: null, error: null, levels: [], queue: Promise.resolve() };
+    devices.set(device.id, group);
+    attachOutput(channelId, group, output);
+    runDevice(group);
     broadcastChannels();
   }
 
@@ -420,9 +635,27 @@ async function start({
       broadcastChannels();
       return { id: producer.id };
     }, { admin: true });
+    on('admin:devices', async () => ({ devices: await captureDevices() }), { admin: true });
+    on('admin:startCapture', async ({ channelId, device: deviceId, input }) => {
+      const channel = findChannel(channelId);
+      if (!channel) throw new Error('channel_not_found');
+      if (live.has(channelId)) throw new Error('already_live');
+      const device = (await captureDevices()).find((d) => d.id === deviceId);
+      if (!device || !Number.isInteger(input) || input < 0 || input > device.inputs || (input === 0 && device.inputs < 2)) throw new Error('device_not_found');
+      await startCapture(channelId, device, input);
+      channel.source = { device: device.id, input, inputs: device.inputs, live: true };
+      saveConfig();
+      return {};
+    }, { admin: true });
     on('admin:stopPublish', ({ channelId }) => {
-      if (live.get(channelId)?.socketId !== socket.id) throw new Error('not_publisher');
+      const entry = live.get(channelId);
+      if (entry?.socketId !== socket.id && !entry?.device) throw new Error('not_publisher');
       stopPublishing(channelId);
+      const channel = findChannel(channelId);
+      if (entry.device && channel?.source?.live) {
+        channel.source.live = false;
+        saveConfig();
+      }
       return {};
     }, { admin: true });
     on('admin:reload', ({ channelId }) => {
@@ -436,6 +669,17 @@ async function start({
       for (const transport of socket.data.transports.values()) transport.close();
     });
   });
+
+  // ---- level meters of server captures, ten times per second ----
+  const levelTimer = setInterval(() => {
+    const levels = {};
+    for (const group of devices.values()) {
+      for (const [channelId, { input }] of group.channels) {
+        levels[channelId] = input ? group.levels[input - 1] || 0 : Math.max(group.levels[0] || 0, group.levels[1] || 0);
+      }
+    }
+    if (Object.keys(levels).length) io.to('admins').emit('admin:levels', levels);
+  }, 100);
 
   // ---- statistics: one sample per minute for every live channel ----
   let statsDirty = false;
@@ -454,13 +698,29 @@ async function start({
   };
   const saveTimer = setInterval(saveStats, 5 * 60000);
 
+  // Server captures that were sending before a restart continue; a missing device is retried until it appears.
+  for (const { id, source } of config.channels) {
+    if (!source?.live) continue;
+    startCapture(id, { id: source.device, inputs: source.inputs || 2 }, source.input)
+      .catch((err) => console.error(`Could not resume capture of channel ${id}:`, err.message));
+  }
+
   await new Promise((resolve) => server.listen(port, host, resolve));
   console.log(`Listening on http://${host}:${server.address().port}, media on ${announcedIp}:${rtcPort} (UDP/TCP)`);
 
   async function close() {
     clearInterval(sampleTimer);
+    clearInterval(levelTimer);
     clearInterval(saveTimer);
     clearTimeout(adminTimer);
+    for (const group of devices.values()) {
+      group.channels.clear();
+      clearTimeout(group.timer);
+      const { proc } = group;
+      group.proc = null;
+      proc?.kill();
+    }
+    devices.clear();
     if (statsDirty) writeJson(statsFile, stats);
     io.close();
     worker.close();
@@ -483,7 +743,7 @@ async function setPasswordCli(dataDir = process.env.DATA_DIR || path.join(__dirn
   console.log(password ? 'Passwort gespeichert. Bitte den Dienst neu starten.' : 'Passwort entfernt. Bitte den Dienst neu starten.');
 }
 
-module.exports = { start, detectIp, validateChannel, addStatsSample, summarizeStats, dayKey, hashPassword, verifyPassword, signToken, verifyToken, LANGUAGES };
+module.exports = { start, detectIp, validateChannel, parseAlsaDevices, parseDeviceNames, parseChannelCount, captureArgs, listCaptureDevices, addStatsSample, summarizeStats, dayKey, hashPassword, verifyPassword, signToken, verifyToken, LANGUAGES };
 
 if (require.main === module) {
   if (process.argv.includes('--set-password')) {

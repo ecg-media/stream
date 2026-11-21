@@ -11,6 +11,7 @@ let { socket, request } = connect({ token });
 let state = null;
 let device = null;
 let inputs = [];
+let serverDevices = [];
 const cards = new Map();
 const pubs = new Map();
 
@@ -22,6 +23,11 @@ function bindSocket() {
     render();
   });
   socket.on('admin:loggedOut', () => logout(false));
+  socket.on('admin:levels', (levels) => {
+    for (const [channelId, level] of Object.entries(levels)) {
+      cards.get(channelId)?.querySelector('.meter').style.setProperty('--level', Number(level) || 0);
+    }
+  });
   socket.on('disconnect', () => {
     for (const pub of pubs.values()) releasePublishing(pub);
     renderChannels();
@@ -34,6 +40,7 @@ async function loadState() {
     state = await request('admin:state');
     showView('admin');
     render();
+    loadServerDevices();
     if (!$('tab_stats').hidden) loadStats();
     for (const [channelId, pub] of pubs) if (pub.want) publish(channelId);
   } catch (err) {
@@ -100,7 +107,7 @@ function render() {
   $('title').textContent = state.title ? `${at('appTitle')} – ${state.title}` : at('appTitle');
   document.title = $('title').textContent;
   $('logout_section').hidden = $('view_admin').hidden || !state.passwordSet;
-  $('insecure').hidden = canPublish;
+  $('insecure').hidden = canPublish || serverDevices.length > 0;
   $('no_password').hidden = state.passwordSet;
   $('addresses').replaceChildren(...(state.addresses.length ? state.addresses : [at('noAddress')]).map((address) => {
     const line = document.createElement('p');
@@ -140,11 +147,14 @@ function createCard(channelId) {
   const meter = card.querySelector('.meter');
   card.level = new Level((value) => meter.style.setProperty('--level', value.toFixed(3)));
   const select = card.querySelector('.device');
-  select.addEventListener('change', () => storageSet(`device:${channelId}`, select.value));
+  select.addEventListener('change', () => {
+    storageSet(`device:${channelId}`, select.value);
+    renderChannels();
+  });
   const raw = card.querySelector('.raw');
   raw.checked = storageGet(`raw:${channelId}`) === '1';
   raw.addEventListener('change', () => storageSet(`raw:${channelId}`, raw.checked ? '1' : null));
-  card.querySelector('.publish').addEventListener('click', () => (pubs.get(channelId)?.want ? stopPublishing(channelId) : publish(channelId)));
+  card.querySelector('.publish').addEventListener('click', () => togglePublish(channelId, select));
   card.querySelector('.edit').addEventListener('click', () => editChannel(state.channels.find((c) => c.id === channelId)));
   card.querySelector('.reload').addEventListener('click', async () => {
     if (!confirm(at('confirmReload'))) return;
@@ -161,21 +171,33 @@ function createCard(channelId) {
 
 function updateCard(card, channel) {
   const pub = pubs.get(channel.id);
-  const mine = channel.live && channel.publisher === socket.id;
+  const { capture } = channel;
+  const mine = channel.live && (channel.publisher === socket.id || !!capture);
   const elsewhere = channel.live && !mine;
+  const want = !!pub?.want || !!capture;
+  const select = card.querySelector('.device');
+  if (capture) selectValue(select, sourceValue(capture));
+  const serverSource = isServerSource(select.value);
   card.querySelector('.name').textContent = channel.name;
   card.querySelector('.language').textContent = languageLabel(channel.language);
   card.querySelector('.listeners').textContent = channel.listeners;
   const badge = card.querySelector('.state');
   badge.className = `badge state ${channel.live ? 'live' : ''}`;
-  badge.textContent = at(mine ? 'sending' : elsewhere ? 'sendingElsewhere' : pub?.want ? 'connecting' : 'off');
+  badge.textContent = at(mine ? 'sending' : elsewhere ? 'sendingElsewhere' : want ? 'connecting' : 'off');
   const btn = card.querySelector('.publish');
-  btn.disabled = !canPublish || elsewhere;
-  btn.classList.toggle('danger', !!pub?.want);
-  card.querySelector('.publish-icon').replaceChildren(icon(pub?.want ? 'stop' : 'mic'));
-  card.querySelector('.publish-text').textContent = at(pub?.want ? 'stopSending' : 'startSending');
-  card.querySelector('.device').disabled = !canPublish || !!pub?.want;
-  card.querySelector('.raw').disabled = !canPublish || !!pub?.want;
+  btn.disabled = elsewhere || (!want && (!select.value || (!serverSource && !canPublish)));
+  btn.classList.toggle('danger', want);
+  card.querySelector('.publish-icon').replaceChildren(icon(want ? 'stop' : 'mic'));
+  card.querySelector('.publish-text').textContent = at(want ? 'stopSending' : 'startSending');
+  select.disabled = want || !select.value;
+  card.querySelector('.raw').disabled = !canPublish || want;
+  card.querySelector('.raw').parentElement.hidden = serverSource;
+  const meter = card.querySelector('.meter');
+  meter.classList.toggle('server', !!capture);
+  if (!capture && !pub?.want) meter.style.setProperty('--level', 0);
+  const error = card.querySelector('.capture-error');
+  error.hidden = !capture?.error;
+  error.textContent = capture?.error ? at('captureError', { error: errorText(capture.error) }) : '';
 }
 
 // ---- audio inputs ----
@@ -193,10 +215,55 @@ async function loadInputs() {
 navigator.mediaDevices?.addEventListener?.('devicechange', loadInputs);
 loadInputs();
 
+async function loadServerDevices() {
+  try {
+    serverDevices = (await request('admin:devices')).devices;
+  } catch (err) {
+    serverDevices = [];
+    toast(errorText(err));
+  }
+  for (const [channelId, card] of cards) fillDevices(card.querySelector('.device'), channelId);
+  render();
+}
+
+// Server sources are encoded as JSON [device, input]; browser sources keep their plain deviceId.
+const sourceValue = ({ device, input }) => JSON.stringify([device, input]);
+const isServerSource = (value) => value.startsWith('[');
+
+function selectValue(select, value) {
+  if ([...select.options].some((o) => o.value === value)) select.value = value;
+  return select.value === value;
+}
+
 function fillDevices(select, channelId) {
-  const stored = storageGet(`device:${channelId}`);
-  select.replaceChildren(...inputs.map((d, i) => new Option(d.label || at('audioInput', { n: i + 1 }), d.deviceId)));
-  if (inputs.some((d) => d.deviceId === stored)) select.value = stored;
+  const channel = state?.channels.find((c) => c.id === channelId);
+  const group = (label, options) => {
+    const el = document.createElement('optgroup');
+    el.label = label;
+    el.append(...options);
+    return el;
+  };
+  const server = serverDevices.flatMap((d) => [
+    ...(d.inputs >= 2 ? [new Option(`${d.name} – ${at('inputStereo')}`, sourceValue({ device: d.id, input: 0 }))] : []),
+    ...Array.from({ length: d.inputs }, (_, i) => new Option(`${d.name} – ${at('inputN', { n: i + 1 })}`, sourceValue({ device: d.id, input: i + 1 }))),
+  ]);
+  const browser = canPublish ? inputs.map((d, i) => new Option(d.label || at('audioInput', { n: i + 1 }), d.deviceId)) : [];
+  select.replaceChildren(...[[at('sourceServer'), server], [at('sourceBrowser'), browser]].filter(([, list]) => list.length).map(([label, list]) => group(label, list)));
+  if (!select.options.length) select.replaceChildren(Object.assign(new Option(at('noSources'), ''), { disabled: true }));
+  [channel?.capture && sourceValue(channel.capture), storageGet(`device:${channelId}`), channel?.source && sourceValue(channel.source)]
+    .some((value) => value && selectValue(select, value));
+}
+
+async function togglePublish(channelId, select) {
+  if (pubs.get(channelId)?.want) return stopPublishing(channelId);
+  try {
+    if (state.channels.find((c) => c.id === channelId)?.capture) return await request('admin:stopPublish', { channelId });
+    if (!isServerSource(select.value)) return publish(channelId);
+    const [device, input] = JSON.parse(select.value);
+    await request('admin:startCapture', { channelId, device, input });
+  } catch (err) {
+    toast(errorText(err));
+  }
 }
 
 // ---- publishing ----

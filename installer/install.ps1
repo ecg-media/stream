@@ -1,6 +1,7 @@
 ﻿# Installs or updates the stream server on Windows 10/11 and starts it automatically with the computer.
 #   - downloads the newest version from GitHub (or uses the folder this script is in, when it is a full copy)
 #   - installs its own Node.js (official zip from nodejs.org, checksum verified) into %ProgramFiles%\ecg-stream\node
+#   - installs ffmpeg for the audio inputs of the server (essentials build from gyan.dev, checksum verified) into %ProgramFiles%\ecg-stream\ffmpeg
 #   - Windows service "EcgStream" (automatic start, restart after a crash, log in %ProgramData%\ecg-stream\server.log)
 #   - firewall rules for the web and media ports, limited to the local network
 # Settings, channels and statistics in %ProgramData%\ecg-stream are kept on updates.
@@ -34,6 +35,8 @@ $NodeMajor = 26
 $InstallDir = Join-Path $env:ProgramFiles 'ecg-stream'
 $AppDir = Join-Path $InstallDir 'app'
 $NodeDir = Join-Path $InstallDir 'node'
+$FfmpegDir = Join-Path $InstallDir 'ffmpeg'
+$FfmpegUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
 $DataDir = Join-Path $env:ProgramData 'ecg-stream'
 $ServiceName = 'EcgStream'
 $FirewallGroup = 'ECG Stream'
@@ -43,6 +46,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.ServiceProcess;
 
 public class EcgStreamService : ServiceBase
@@ -50,6 +54,28 @@ public class EcgStreamService : ServiceBase
     static string node, appDir, logFile;
     readonly object logLock = new object();
     Process server;
+    // All processes of the server (node and its ffmpeg children) end together with this service.
+    static readonly IntPtr job = CreateJobObject(IntPtr.Zero, null);
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct JobLimits
+    {
+        public long PerProcessUserTimeLimit, PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize, MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass, SchedulingClass;
+        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount, ReadTransferCount, WriteTransferCount, OtherTransferCount;
+        public UIntPtr ProcessMemoryLimit, JobMemoryLimit, PeakProcessMemoryUsed, PeakJobMemoryUsed;
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    static extern IntPtr CreateJobObject(IntPtr attributes, string name);
+    [DllImport("kernel32.dll")]
+    static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref JobLimits info, int length);
+    [DllImport("kernel32.dll")]
+    static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
     volatile bool stopping;
 
     public static void Main(string[] args)
@@ -88,7 +114,10 @@ public class EcgStreamService : ServiceBase
             Log("Server exited with code " + server.ExitCode + "; the service is restarted by Windows.");
             Environment.Exit(1);
         };
+        var limits = new JobLimits { LimitFlags = 0x2000 }; // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        SetInformationJobObject(job, 9, ref limits, Marshal.SizeOf(typeof(JobLimits))); // JobObjectExtendedLimitInformation
         server.Start();
+        AssignProcessToJobObject(job, server.Handle);
         server.BeginOutputReadLine();
         server.BeginErrorReadLine();
     }
@@ -175,6 +204,23 @@ try {
     [IO.Compression.ZipFile]::ExtractToDirectory("$tmp\node.zip", "$tmp\node")
   }
 
+  # ---- ffmpeg (records the audio inputs of this computer) ----
+  Step 'ffmpeg wird geprüft'
+  Invoke-WebRequest "$FfmpegUrl.sha256" -OutFile "$tmp\ffmpeg.sha256" -UseBasicParsing
+  $ffmpegSum = ((Get-Content "$tmp\ffmpeg.sha256" -Raw).Trim() -split '\s+')[0]
+  if ($ffmpegSum -notmatch '^[0-9a-fA-F]{64}$') { throw 'Ungültige Prüfsumme für ffmpeg.' }
+  $ffmpegVersionFile = Join-Path $FfmpegDir '.version'
+  $ffmpegChanged = -not ((Test-Path $ffmpegVersionFile) -and (Get-Content $ffmpegVersionFile -Raw).Trim() -eq $ffmpegSum)
+  if ($ffmpegChanged) {
+    Write-Host 'Lade ffmpeg ...'
+    Invoke-WebRequest $FfmpegUrl -OutFile "$tmp\ffmpeg.zip" -UseBasicParsing
+    if ((Get-FileHash "$tmp\ffmpeg.zip" -Algorithm SHA256).Hash -ne $ffmpegSum) { throw 'Prüfsumme von ffmpeg stimmt nicht.' }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory("$tmp\ffmpeg.zip", "$tmp\ffmpeg")
+    $ffmpegExe = (Get-ChildItem "$tmp\ffmpeg" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName
+    if (-not $ffmpegExe) { throw 'ffmpeg.exe wurde im Download nicht gefunden.' }
+  }
+
   # ---- program files ----
   Step 'Programm wird geladen'
   $local = if ($PSScriptRoot) { Join-Path $PSScriptRoot '..' } else { $null }
@@ -214,6 +260,12 @@ try {
     Copy-Tree (Split-Path $nodeExe) $NodeDir
     Set-Content $versionFile $nodeName
   }
+  if ($ffmpegChanged) {
+    if (Test-Path $FfmpegDir) { Remove-Item $FfmpegDir -Recurse -Force }
+    New-Item -ItemType Directory $FfmpegDir | Out-Null
+    Copy-Item $ffmpegExe $FfmpegDir
+    Set-Content $ffmpegVersionFile $ffmpegSum
+  }
   if (Test-Path $AppDir) { Remove-Item $AppDir -Recurse -Force }
   Copy-Tree $newApp $AppDir
   # The service runs as SYSTEM: only administrators and SYSTEM may change the program and data folders.
@@ -228,7 +280,7 @@ try {
   $nodePath = Join-Path $NodeDir 'node.exe'
   New-Service -Name $ServiceName -BinaryPathName "`"$exe`" `"$nodePath`" `"$AppDir`"" -DisplayName 'ECG Stream' -StartupType Automatic | Out-Null
   Set-Service $ServiceName -Description 'Audio-Übertragung für das lokale Netzwerk.'
-  $environment = @("PORT=$Port", "RTC_PORT=$RtcPort", "DATA_DIR=$DataDir")
+  $environment = @("PORT=$Port", "RTC_PORT=$RtcPort", "DATA_DIR=$DataDir", "FFMPEG=$(Join-Path $FfmpegDir 'ffmpeg.exe')")
   if ($Ip) { $environment += "IP=$Ip" }
   Set-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name Environment -Type MultiString -Value $environment
   Invoke-Checked sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/5000/restart/30000 | Out-Null
