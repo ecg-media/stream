@@ -2,6 +2,8 @@
 # Installs or updates the stream server on Linux and macOS and starts it automatically with the computer.
 #   - downloads the newest version from GitHub (or uses the folder this script is in, when it is a full copy)
 #   - installs its own Node.js (official download from nodejs.org, checksum verified) into /opt/ecg-stream/node
+#   - installs ffmpeg for the audio inputs of the server: Linux from the package manager, macOS from
+#     ffmpeg.martin-riedl.de (checksum verified) into /opt/ecg-stream/ffmpeg
 #   - Linux: systemd service "ecg-stream" running as the system user "ecg-stream"
 #   - macOS: launchd service "media.ecg.stream" running as the installing user
 #   - opens the firewall (ufw, firewalld or the macOS firewall) for the web and media ports
@@ -20,6 +22,7 @@ NODE_MAJOR=26
 BASE="/opt/ecg-stream"
 APP="$BASE/app"
 NODE_DIR="$BASE/node"
+FFMPEG_DIR="$BASE/ffmpeg"
 DATA="$BASE/data"
 OS="$(uname -s)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
@@ -61,7 +64,7 @@ remove_service() {
 if [ "${1:-}" = "--uninstall" ]; then
   say "Stream wird entfernt"
   remove_service
-  rm -rf "$APP" "$NODE_DIR"
+  rm -rf "$APP" "$NODE_DIR" "$FFMPEG_DIR"
   echo "Programm entfernt. Ihre Einstellungen und Statistiken liegen weiterhin in $DATA (bei Bedarf selbst löschen)."
   exit 0
 fi
@@ -102,6 +105,35 @@ if [ "$(cat "$NODE_DIR/.version" 2>/dev/null)" != "$WANT" ]; then
 fi
 NODE="$NODE_DIR/bin/node"
 NPM=("$NODE" "$NODE_DIR/lib/node_modules/npm/bin/npm-cli.js")
+
+# ---- ffmpeg (records the audio inputs of this computer) ----
+say "ffmpeg wird geprüft"
+has_opus() { [ -n "$1" ] && "$1" -hide_banner -encoders 2>/dev/null | grep libopus >/dev/null; }
+if [ "$OS" = Linux ]; then
+  if ! has_opus "$(command -v ffmpeg || true)"; then
+    if command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y ffmpeg || true
+    elif command -v dnf >/dev/null 2>&1; then dnf install -y ffmpeg-free || dnf install -y ffmpeg || true
+    fi
+  fi
+  FFMPEG="$(command -v ffmpeg || true)"
+else
+  FFMPEG_URL="$(curl -fsSL -r 0-0 -o /dev/null -w '%{url_effective}' "https://ffmpeg.martin-riedl.de/redirect/latest/macos/$([ "$ARCH" = arm64 ] && echo arm64 || echo amd64)/release/ffmpeg.zip")"
+  download "$FFMPEG_URL.sha256" "$TMP/ffmpeg.sha256"
+  FFMPEG_SUM="$(awk '{print $1; exit}' "$TMP/ffmpeg.sha256")"
+  [[ "$FFMPEG_SUM" =~ ^[0-9a-f]{64}$ ]] || fail "Ungültige Prüfsumme für ffmpeg."
+  if [ "$(cat "$FFMPEG_DIR/.version" 2>/dev/null)" != "$FFMPEG_SUM" ]; then
+    echo "Lade ffmpeg ..."
+    download "$FFMPEG_URL" "$TMP/ffmpeg.zip"
+    [ "$(shasum -a 256 "$TMP/ffmpeg.zip" | cut -d' ' -f1)" = "$FFMPEG_SUM" ] || fail "Prüfsumme von ffmpeg stimmt nicht."
+    rm -rf "$FFMPEG_DIR"
+    mkdir -p "$FFMPEG_DIR"
+    unzip -q "$TMP/ffmpeg.zip" ffmpeg -d "$FFMPEG_DIR"
+    chmod 755 "$FFMPEG_DIR/ffmpeg"
+    echo "$FFMPEG_SUM" > "$FFMPEG_DIR/.version"
+  fi
+  FFMPEG="$FFMPEG_DIR/ffmpeg"
+fi
+has_opus "$FFMPEG" || printf '\n\033[1;33mHinweis: ffmpeg mit Opus fehlt. Senden über die Audioeingänge des Servers ist nicht möglich, nur über den Browser am Server.\033[0m\n'
 
 # ---- program files ----
 say "Programm wird geladen"
@@ -155,6 +187,7 @@ Environment=PORT=$PORT RTC_PORT=$RTC_PORT DATA_DIR=$DATA${IP:+ IP=$IP}
 ExecStart=$NODE server/index.js
 Restart=always
 RestartSec=3
+SupplementaryGroups=audio
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
@@ -187,7 +220,7 @@ else
   <key>WorkingDirectory</key><string>$APP</string>
   <key>ProgramArguments</key><array><string>$NODE</string><string>server/index.js</string></array>
   <key>EnvironmentVariables</key><dict>
-    <key>PORT</key><string>$PORT</string><key>RTC_PORT</key><string>$RTC_PORT</string><key>DATA_DIR</key><string>$DATA</string>$ENV_IP
+    <key>PORT</key><string>$PORT</string><key>RTC_PORT</key><string>$RTC_PORT</string><key>DATA_DIR</key><string>$DATA</string><key>FFMPEG</key><string>$FFMPEG</string>$ENV_IP
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
