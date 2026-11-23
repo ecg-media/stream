@@ -104,6 +104,7 @@ if [ "$(cat "$NODE_DIR/.version" 2>/dev/null)" != "$WANT" ]; then
   echo "$WANT" > "$NODE_DIR/.version"
 fi
 NODE="$NODE_DIR/bin/node"
+export PATH="$NODE_DIR/bin:$PATH"
 NPM=("$NODE" "$NODE_DIR/lib/node_modules/npm/bin/npm-cli.js")
 
 # ---- ffmpeg (records the audio inputs of this computer) ----

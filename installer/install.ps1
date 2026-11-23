@@ -240,6 +240,7 @@ try {
   Step 'Abhängigkeiten werden installiert'
   $nodeExe = if ($nodeChanged) { Join-Path (Get-ChildItem "$tmp\node" -Directory | Select-Object -First 1).FullName 'node.exe' } else { Join-Path $NodeDir 'node.exe' }
   $npmCli = Join-Path (Split-Path $nodeExe) 'node_modules\npm\bin\npm-cli.js'
+  $env:Path = "$(Split-Path $nodeExe);$env:Path"
   Push-Location $newApp
   try {
     & $nodeExe $npmCli ci --omit=dev --no-audit --no-fund
